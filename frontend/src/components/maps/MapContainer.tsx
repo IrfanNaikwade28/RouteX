@@ -71,26 +71,26 @@ export function MapContainer({
   const routingControlRef = useRef<L.Routing.Control | null>(null);
   const clickMarkerRef = useRef<L.Marker | null>(null);
 
-  // Handle map click
+  // Handle map click - captures coordinates when user clicks on map
   const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
     if (!enableClick || !onMapClick || !mapRef.current) return;
 
     const { lat, lng } = e.latlng;
 
-    // Remove previous click marker
+    // Remove previous click marker to allow re-selection
     if (clickMarkerRef.current) {
       mapRef.current.removeLayer(clickMarkerRef.current);
     }
 
-    // Add new marker
+    // Add new marker at clicked position
     const marker = L.marker([lat, lng], {
       icon: createIcon(clickMarkerType),
     }).addTo(mapRef.current);
 
     clickMarkerRef.current = marker;
 
-    // Reverse geocoding simulation (in real app, use a geocoding service)
-    const address = `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    // Format address as "Lat: X, Lng: Y" (no geocoding API used per requirements)
+    const address = `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
     
     onMapClick({ lat, lng, address });
   }, [enableClick, onMapClick, clickMarkerType]);
@@ -106,10 +106,6 @@ export function MapContainer({
       maxZoom: 19,
     }).addTo(mapRef.current);
 
-    if (enableClick) {
-      mapRef.current.on('click', handleMapClick);
-    }
-
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -117,6 +113,23 @@ export function MapContainer({
       }
     };
   }, []);
+
+  // Attach/detach click listener when enableClick or handler changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (enableClick) {
+      mapRef.current.on('click', handleMapClick);
+    } else {
+      mapRef.current.off('click', handleMapClick);
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.off('click', handleMapClick);
+      }
+    };
+  }, [enableClick, handleMapClick]);
 
   // Update center
   useEffect(() => {

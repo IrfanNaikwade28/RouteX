@@ -45,6 +45,14 @@ export default function Auth() {
     setIsLoading(true);
 
     try {
+      // Signup restriction: Only clients can register
+      // Admin accounts are system-created, Driver accounts are created by Admin
+      if (mode === 'signup' && selectedRole !== 'client') {
+        setError('Signup is only available for Client accounts. Admin and Driver accounts must be created by the system administrator.');
+        setIsLoading(false);
+        return;
+      }
+
       let result;
       if (mode === 'login') {
         result = await login(formData.email, formData.password, selectedRole);
@@ -101,7 +109,8 @@ export default function Auth() {
             <button
               onClick={() => setMode('login')}
               className={cn(
-                "flex-1 py-4 text-sm font-medium transition-colors",
+                "py-4 text-sm font-medium transition-colors",
+                selectedRole !== 'client' ? "w-full" : "flex-1",
                 mode === 'login' 
                   ? "text-foreground border-b-2 border-accent" 
                   : "text-muted-foreground hover:text-foreground"
@@ -109,17 +118,20 @@ export default function Auth() {
             >
               Sign In
             </button>
-            <button
-              onClick={() => setMode('signup')}
-              className={cn(
-                "flex-1 py-4 text-sm font-medium transition-colors",
-                mode === 'signup' 
-                  ? "text-foreground border-b-2 border-accent" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Sign Up
-            </button>
+            {/* Only show Signup tab for Client role */}
+            {selectedRole === 'client' && (
+              <button
+                onClick={() => setMode('signup')}
+                className={cn(
+                  "flex-1 py-4 text-sm font-medium transition-colors",
+                  mode === 'signup' 
+                    ? "text-foreground border-b-2 border-accent" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Sign Up
+              </button>
+            )}
           </div>
 
           <div className="p-6">
@@ -135,7 +147,13 @@ export default function Auth() {
                     <button
                       key={role}
                       type="button"
-                      onClick={() => setSelectedRole(role)}
+                      onClick={() => {
+                        setSelectedRole(role);
+                        // Auto-switch to login if Driver/Admin selected during signup
+                        if (mode === 'signup' && role !== 'client') {
+                          setMode('login');
+                        }
+                      }}
                       className={cn(
                         "relative p-4 rounded-xl border-2 transition-all duration-200",
                         selectedRole === role

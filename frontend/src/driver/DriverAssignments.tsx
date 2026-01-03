@@ -86,7 +86,7 @@ export default function DriverAssignments() {
                     </div>
                     <div>
                       <p className="font-semibold">#{parcel.id.slice(-8).toUpperCase()}</p>
-                      <p className="text-sm text-muted-foreground">{parcel.parcelType} • {parcel.weight}kg • {parcel.size}</p>
+                      <p className="text-sm text-muted-foreground">{parcel.parcelType} • {parcel.weight}kg • {parcel.size}{parcel.height && parcel.width ? ` • ${parcel.height}×${parcel.width}m` : ''}</p>
                     </div>
                   </div>
                   <StatusBadge status={parcel.status} />

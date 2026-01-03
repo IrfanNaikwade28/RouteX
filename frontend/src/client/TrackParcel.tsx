@@ -150,7 +150,7 @@ export default function TrackParcel() {
                       Live Tracking - #{selectedParcel.id.slice(-8).toUpperCase()}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {selectedParcel.parcelType} • {selectedParcel.weight}kg
+                      {selectedParcel.parcelType} • {selectedParcel.weight}kg{selectedParcel.height && selectedParcel.width ? ` • ${selectedParcel.height}×${selectedParcel.width}m` : ''}
                     </p>
                   </div>
                   <StatusBadge status={selectedParcel.status} />

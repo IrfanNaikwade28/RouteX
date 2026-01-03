@@ -30,6 +30,8 @@ export default function SendParcel() {
     parcelType: '',
     weight: '',
     size: '',
+    height: '',
+    width: '',
     contactNumber: user?.phone || '',
   });
 
@@ -60,6 +62,8 @@ export default function SendParcel() {
       parcelType: formData.parcelType,
       weight: parseFloat(formData.weight),
       size: formData.size,
+      height: formData.height ? parseFloat(formData.height) : undefined,
+      width: formData.width ? parseFloat(formData.width) : undefined,
       contactNumber: formData.contactNumber,
       status: 'requested',
     });
@@ -259,6 +263,34 @@ export default function SendParcel() {
                           <option key={size} value={size}>{size}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Height (m)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.height}
+                        onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                        className="input-field"
+                        placeholder="0.0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Width (m)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.width}
+                        onChange={(e) => setFormData({ ...formData, width: e.target.value })}
+                        className="input-field"
+                        placeholder="0.0"
+                      />
                     </div>
                   </div>
                 </div>

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { MapContainer } from '@/components/maps/MapContainer';
 import { StatusBadge } from '@/components/StatusBadge';
 import { dataStore } from '@/data/store';
 import { dummySocket } from '@/sockets/dummySocket';
 import { Parcel, Location, Driver } from '@/data/mockData';
+import { cn } from '@/lib/utils';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: 'fas fa-home' },
@@ -18,12 +20,20 @@ interface DriverWithLocation extends Driver {
 }
 
 export default function AdminTracking() {
+  const [searchParams] = useSearchParams();
   const [activeParcels, setActiveParcels] = useState<Parcel[]>([]);
   const [driversWithLocations, setDriversWithLocations] = useState<DriverWithLocation[]>([]);
+  const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
 
   useEffect(() => {
     const parcels = dataStore.getParcels().filter(p => p.status === 'in-transit');
     setActiveParcels(parcels);
+
+    // Get parcel ID from URL params
+    const parcelIdFromUrl = searchParams.get('parcel');
+    if (parcelIdFromUrl && parcels.some(p => p.id === parcelIdFromUrl)) {
+      setSelectedParcelId(parcelIdFromUrl);
+    }
 
     const drivers = dataStore.getDrivers();
     setDriversWithLocations(drivers.map(d => ({ ...d, liveLocation: d.currentLocation })));
@@ -68,6 +78,42 @@ export default function AdminTracking() {
       label?: string;
     }> = [];
 
+    // If a parcel is selected, show only its markers
+    if (selectedParcelId) {
+      const selectedParcel = activeParcels.find(p => p.id === selectedParcelId);
+      if (selectedParcel) {
+        // Add driver marker for selected parcel
+        const driver = driversWithLocations.find(d => d.id === selectedParcel.driverId);
+        if (driver?.liveLocation) {
+          markers.push({
+            id: `driver-${driver.id}`,
+            position: [driver.liveLocation.lat, driver.liveLocation.lng],
+            type: 'driver',
+            popup: `${driver.name} - ${driver.vehicleNumber}`,
+            label: driver.name,
+          });
+        }
+
+        // Add pickup marker
+        markers.push({
+          id: `pickup-${selectedParcel.id}`,
+          position: [selectedParcel.pickupLocation.lat, selectedParcel.pickupLocation.lng],
+          type: 'pickup',
+          popup: `Pickup: ${selectedParcel.pickupLocation.address}`,
+        });
+
+        // Add destination marker
+        markers.push({
+          id: `drop-${selectedParcel.id}`,
+          position: [selectedParcel.dropLocation.lat, selectedParcel.dropLocation.lng],
+          type: 'destination',
+          popup: `Destination: ${selectedParcel.dropLocation.address}`,
+        });
+      }
+      return markers;
+    }
+
+    // Show all markers when no parcel is selected
     // Add driver markers
     driversWithLocations.forEach((driver) => {
       if (driver.liveLocation) {
@@ -112,10 +158,17 @@ export default function AdminTracking() {
             ) : (
               activeParcels.map((parcel) => {
                 const driver = driversWithLocations.find(d => d.id === parcel.driverId);
+                const isSelected = selectedParcelId === parcel.id;
                 return (
-                  <div
+                  <button
                     key={parcel.id}
-                    className="p-4 border-b border-border hover:bg-secondary/30 transition-colors"
+                    onClick={() => setSelectedParcelId(isSelected ? null : parcel.id)}
+                    className={cn(
+                      "w-full p-4 border-b border-border text-left transition-colors",
+                      isSelected
+                        ? "bg-accent/10 border-l-4 border-l-accent"
+                        : "hover:bg-secondary/30"
+                    )}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm">
@@ -145,7 +198,7 @@ export default function AdminTracking() {
                         </span>
                       </div>
                     )}
-                  </div>
+                  </button>
                 );
               })
             )}
@@ -157,25 +210,64 @@ export default function AdminTracking() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold">Live Map</h3>
-              <p className="text-sm text-muted-foreground">Real-time fleet overview</p>
+              <p className="text-sm text-muted-foreground">
+                {selectedParcelId 
+                  ? `Tracking #${selectedParcelId.slice(-8).toUpperCase()}` 
+                  : 'Real-time fleet overview'}
+              </p>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-accent"></div>
-                <span className="text-muted-foreground">Drivers</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-destructive"></div>
-                <span className="text-muted-foreground">Destinations</span>
+            <div className="flex items-center gap-4">
+              {selectedParcelId && (
+                <button
+                  onClick={() => setSelectedParcelId(null)}
+                  className="text-sm text-accent hover:underline flex items-center gap-1"
+                >
+                  <i className="fas fa-times"></i>
+                  Clear Selection
+                </button>
+              )}
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-accent"></div>
+                  <span className="text-muted-foreground">Drivers</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-destructive"></div>
+                  <span className="text-muted-foreground">Destinations</span>
+                </div>
               </div>
             </div>
           </div>
           <div className="h-[calc(100%-4rem)] rounded-lg overflow-hidden">
-            <MapContainer
-              center={[40.7128, -74.006]}
-              zoom={12}
-              markers={getMapMarkers()}
-            />
+            {(() => {
+              const selectedParcel = selectedParcelId ? activeParcels.find(p => p.id === selectedParcelId) : null;
+              const driver = selectedParcel ? driversWithLocations.find(d => d.id === selectedParcel.driverId) : null;
+              
+              // Calculate center based on selection
+              let center: [number, number] = [40.7128, -74.006];
+              if (selectedParcel && driver?.liveLocation) {
+                center = [
+                  (selectedParcel.pickupLocation.lat + selectedParcel.dropLocation.lat + driver.liveLocation.lat) / 3,
+                  (selectedParcel.pickupLocation.lng + selectedParcel.dropLocation.lng + driver.liveLocation.lng) / 3,
+                ];
+              } else if (selectedParcel) {
+                center = [
+                  (selectedParcel.pickupLocation.lat + selectedParcel.dropLocation.lat) / 2,
+                  (selectedParcel.pickupLocation.lng + selectedParcel.dropLocation.lng) / 2,
+                ];
+              }
+
+              return (
+                <MapContainer
+                  center={center}
+                  zoom={selectedParcelId ? 13 : 12}
+                  markers={getMapMarkers()}
+                  showRoute={!!selectedParcel && !!driver?.liveLocation}
+                  routeStart={driver?.liveLocation ? [driver.liveLocation.lat, driver.liveLocation.lng] : undefined}
+                  routeEnd={selectedParcel ? [selectedParcel.dropLocation.lat, selectedParcel.dropLocation.lng] : undefined}
+                />
+              );
+            })()}
           </div>
         </div>
       </div>

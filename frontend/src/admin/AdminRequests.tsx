@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -16,6 +17,7 @@ const navItems = [
 type TabType = 'pending' | 'accepted' | 'in-transit' | 'delivered';
 
 export default function AdminRequests() {
+  const navigate = useNavigate();
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('pending');
@@ -118,7 +120,7 @@ export default function AdminRequests() {
                   <div>
                     <p className="font-semibold">#{parcel.id.slice(-8).toUpperCase()}</p>
                     <p className="text-sm text-muted-foreground">
-                      {parcel.parcelType} • {parcel.weight}kg • {parcel.size}
+                      {parcel.parcelType} • {parcel.weight}kg • {parcel.size}{parcel.height && parcel.width ? ` • ${parcel.height}×${parcel.width}m` : ''}
                     </p>
                   </div>
                 </div>
@@ -221,6 +223,16 @@ export default function AdminRequests() {
                     </button>
                   )}
                 </div>
+              )}
+
+              {parcel.status === 'in-transit' && (
+                <button
+                  onClick={() => navigate(`/admin/tracking?parcel=${parcel.id}`)}
+                  className="w-full py-2.5 rounded-lg bg-accent text-accent-foreground font-medium hover:bg-accent/90 transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="fas fa-route"></i>
+                  Track Route
+                </button>
               )}
             </motion.div>
           ))

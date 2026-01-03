@@ -29,6 +29,8 @@ export interface Parcel {
   parcelType: string;
   weight: number;
   size: string;
+  height?: number;
+  width?: number;
   contactNumber: string;
   status: ParcelStatus;
   driverId?: string;
@@ -160,6 +162,8 @@ export const initialParcels: Parcel[] = [
     parcelType: 'Electronics',
     weight: 2.5,
     size: 'Medium',
+    height: 0.3,
+    width: 0.4,
     contactNumber: '+1 555-0101',
     status: 'in-transit',
     driverId: 'driver-1',
@@ -177,6 +181,8 @@ export const initialParcels: Parcel[] = [
     parcelType: 'Documents',
     weight: 0.5,
     size: 'Small',
+    height: 0.15,
+    width: 0.2,
     contactNumber: '+1 555-0102',
     status: 'requested',
     createdAt: new Date('2024-01-16'),
@@ -192,6 +198,8 @@ export const initialParcels: Parcel[] = [
     parcelType: 'Fragile Items',
     weight: 3.0,
     size: 'Large',
+    height: 0.5,
+    width: 0.6,
     contactNumber: '+1 555-0101',
     status: 'delivered',
     driverId: 'driver-2',
