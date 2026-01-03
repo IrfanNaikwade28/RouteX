@@ -193,6 +193,87 @@ class DataStore {
     }
   }
 
+  /**
+   * Add a new driver (Admin only operation)
+   * Validates email uniqueness before creating
+   */
+  addDriver(driverData: Omit<Driver, 'id'>): { success: boolean; driver?: Driver; error?: string } {
+    // Check for duplicate email
+    const existingDriver = this.drivers.find(d => d.email.toLowerCase() === driverData.email.toLowerCase());
+    if (existingDriver) {
+      return { success: false, error: 'A driver with this email already exists' };
+    }
+
+    // Create new driver with generated ID
+    const newDriver: Driver = {
+      ...driverData,
+      id: `driver-${Date.now()}`,
+    };
+
+    this.drivers.push(newDriver);
+    this.saveToStorage();
+
+    return { success: true, driver: newDriver };
+  }
+
+  /**
+   * Update an existing driver (Admin only operation)
+   * Validates email uniqueness if email is being changed
+   */
+  updateDriver(driverId: string, updates: Partial<Omit<Driver, 'id'>>): { success: boolean; driver?: Driver; error?: string } {
+    const index = this.drivers.findIndex(d => d.id === driverId);
+    if (index === -1) {
+      return { success: false, error: 'Driver not found' };
+    }
+
+    // If email is being updated, check for duplicates
+    if (updates.email) {
+      const existingDriver = this.drivers.find(
+        d => d.email.toLowerCase() === updates.email!.toLowerCase() && d.id !== driverId
+      );
+      if (existingDriver) {
+        return { success: false, error: 'A driver with this email already exists' };
+      }
+    }
+
+    // Update driver
+    this.drivers[index] = {
+      ...this.drivers[index],
+      ...updates,
+    };
+    this.saveToStorage();
+
+    return { success: true, driver: this.drivers[index] };
+  }
+
+  /**
+   * Delete a driver (Admin only operation)
+   * Note: Should check if driver has active assignments before deleting in production
+   */
+  deleteDriver(driverId: string): { success: boolean; error?: string } {
+    const index = this.drivers.findIndex(d => d.id === driverId);
+    if (index === -1) {
+      return { success: false, error: 'Driver not found' };
+    }
+
+    // Check if driver has active parcels
+    const activeParcels = this.parcels.filter(
+      p => p.driverId === driverId && p.status === 'in-transit'
+    );
+    if (activeParcels.length > 0) {
+      return { 
+        success: false, 
+        error: `Cannot delete driver with ${activeParcels.length} active delivery(ies)` 
+      };
+    }
+
+    // Remove driver
+    this.drivers.splice(index, 1);
+    this.saveToStorage();
+
+    return { success: true };
+  }
+
   // Notification operations
   getNotifications(userId: string): Notification[] {
     return this.notifications

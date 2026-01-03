@@ -5,7 +5,7 @@ import { DashboardLayout } from '@/components/DashboardLayout';
 import { MapContainer } from '@/components/maps/MapContainer';
 import { useAuth } from '@/auth/AuthContext';
 import { dataStore } from '@/data/store';
-import { Location, parcelTypes, sizeOptions } from '@/data/mockData';
+import { Location, parcelTypes } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -16,12 +16,71 @@ const navItems = [
 
 type LocationType = 'pickup' | 'drop';
 
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * @param lat1 - Latitude of first point
+ * @param lng1 - Longitude of first point
+ * @param lat2 - Latitude of second point
+ * @param lng2 - Longitude of second point
+ * @returns Distance in kilometers
+ */
+const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
+
+/**
+ * Calculate parcel delivery price based on distance and parcel details
+ * Pricing Model:
+ * - Base Fare: ₹50
+ * - Distance: ₹10 per km
+ * - Weight: ₹5 per kg
+ * - Breadth Multiplier: ≤0.5m (1.0), 0.6-1.0m (1.2), 1.1-1.5m (1.5), >1.5m (1.8)
+ */
+const calculatePrice = (
+  distanceKm: number,
+  weightKg: number,
+  breadthM: number
+): number => {
+  const BASE_FARE = 50;
+  const DISTANCE_RATE = 10; // ₹ per km
+  const WEIGHT_RATE = 5; // ₹ per kg
+
+  // Breadth-based multipliers
+  let breadthMultiplier = 1.0;
+  if (breadthM <= 0.5) {
+    breadthMultiplier = 1.0;
+  } else if (breadthM <= 1.0) {
+    breadthMultiplier = 1.2;
+  } else if (breadthM <= 1.5) {
+    breadthMultiplier = 1.5;
+  } else {
+    breadthMultiplier = 1.8;
+  }
+
+  // Calculate total price
+  const subtotal = BASE_FARE + (distanceKm * DISTANCE_RATE) + (weightKg * WEIGHT_RATE);
+  const total = subtotal * breadthMultiplier;
+
+  return Math.round(total * 100) / 100; // Round to 2 decimal places
+};
+
 export default function SendParcel() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeLocationSelect, setActiveLocationSelect] = useState<LocationType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
+  const [totalDistance, setTotalDistance] = useState<number | null>(null);
+  const [priceError, setPriceError] = useState('');
 
   const [formData, setFormData] = useState({
     senderName: user?.name || '',
@@ -29,9 +88,10 @@ export default function SendParcel() {
     dropLocation: null as Location | null,
     parcelType: '',
     weight: '',
-    size: '',
+    breadth: '',
     height: '',
     width: '',
+    description: '',
     contactNumber: user?.phone || '',
   });
 
@@ -42,6 +102,69 @@ export default function SendParcel() {
       setFormData({ ...formData, dropLocation: location });
     }
     setActiveLocationSelect(null);
+    // Reset calculated price and distance when locations change
+    setCalculatedPrice(null);
+    setTotalDistance(null);
+    setPriceError('');
+  };
+
+  /**
+   * Helper to update form data and reset price when relevant fields change
+   */
+  const updateFormData = (updates: Partial<typeof formData>) => {
+    setFormData({ ...formData, ...updates });
+    // Reset price when weight or breadth changes
+    if ('weight' in updates || 'breadth' in updates) {
+      setCalculatedPrice(null);
+      setTotalDistance(null);
+      setPriceError('');
+    }
+  };
+
+  /**
+   * Handle Calculate Price button click
+   * Validates required fields and calculates total delivery cost
+   */
+  const handleCalculatePrice = () => {
+    setPriceError('');
+
+    // Validation: Check if pickup and drop locations exist
+    if (!formData.pickupLocation || !formData.dropLocation) {
+      setPriceError('Please select both pickup and drop locations on the map');
+      return;
+    }
+
+    // Validation: Check if weight is filled
+    if (!formData.weight || parseFloat(formData.weight) <= 0) {
+      setPriceError('Please enter a valid parcel weight');
+      return;
+    }
+
+    // Validation: Check if breadth is filled
+    if (!formData.breadth || parseFloat(formData.breadth) <= 0) {
+      setPriceError('Please enter a valid parcel breadth');
+      return;
+    }
+
+    // Calculate distance between pickup and drop locations
+    const distanceKm = calculateDistance(
+      formData.pickupLocation.lat,
+      formData.pickupLocation.lng,
+      formData.dropLocation.lat,
+      formData.dropLocation.lng
+    );
+
+    // Store calculated distance (rounded to 2 decimals)
+    setTotalDistance(Math.round(distanceKm * 100) / 100);
+
+    // Calculate price based on distance and parcel details
+    const price = calculatePrice(
+      distanceKm,
+      parseFloat(formData.weight),
+      parseFloat(formData.breadth)
+    );
+
+    setCalculatedPrice(price);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,7 +184,7 @@ export default function SendParcel() {
       dropLocation: formData.dropLocation,
       parcelType: formData.parcelType,
       weight: parseFloat(formData.weight),
-      size: formData.size,
+      size: 'Medium', // Default size for backward compatibility
       height: formData.height ? parseFloat(formData.height) : undefined,
       width: formData.width ? parseFloat(formData.width) : undefined,
       contactNumber: formData.contactNumber,
@@ -169,10 +292,15 @@ export default function SendParcel() {
                       )}
                     >
                       {formData.pickupLocation ? (
-                        <span className="flex items-center gap-2">
-                          <i className="fas fa-location-dot text-info"></i>
-                          {formData.pickupLocation.address}
-                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <i className="fas fa-location-dot text-info"></i>
+                            <span className="font-medium">{formData.pickupLocation.address}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground pl-6">
+                            Lat: {formData.pickupLocation.lat.toFixed(6)}, Lng: {formData.pickupLocation.lng.toFixed(6)}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">
                           Click to select on map
@@ -197,10 +325,15 @@ export default function SendParcel() {
                       )}
                     >
                       {formData.dropLocation ? (
-                        <span className="flex items-center gap-2">
-                          <i className="fas fa-flag-checkered text-destructive"></i>
-                          {formData.dropLocation.address}
-                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <i className="fas fa-flag-checkered text-destructive"></i>
+                            <span className="font-medium">{formData.dropLocation.address}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground pl-6">
+                            Lat: {formData.dropLocation.lat.toFixed(6)}, Lng: {formData.dropLocation.lng.toFixed(6)}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">
                           Click to select on map
@@ -242,7 +375,7 @@ export default function SendParcel() {
                         type="number"
                         step="0.1"
                         value={formData.weight}
-                        onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                        onChange={(e) => updateFormData({ weight: e.target.value })}
                         className="input-field"
                         placeholder="0.0"
                         required
@@ -250,19 +383,17 @@ export default function SendParcel() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Size
+                        Breadth (m)
                       </label>
-                      <select
-                        value={formData.size}
-                        onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={formData.breadth}
+                        onChange={(e) => updateFormData({ breadth: e.target.value })}
                         className="input-field"
+                        placeholder="0.0"
                         required
-                      >
-                        <option value="">Select size</option>
-                        {sizeOptions.map((size) => (
-                          <option key={size} value={size}>{size}</option>
-                        ))}
-                      </select>
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -292,6 +423,66 @@ export default function SendParcel() {
                         placeholder="0.0"
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Description (Optional)
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="input-field min-h-[80px] resize-none"
+                      placeholder="Add any special instructions or notes about your parcel..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Calculate Price Section */}
+                  <div className="pt-4 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={handleCalculatePrice}
+                      className="w-full px-4 py-2 rounded-lg bg-accent/10 text-accent font-medium hover:bg-accent/20 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <i className="fas fa-calculator"></i>
+                      Calculate Price
+                    </button>
+                    {priceError && (
+                      <div className="mt-3 p-3 rounded-lg bg-destructive/15 text-destructive text-sm">
+                        {priceError}
+                      </div>
+                    )}
+                    {totalDistance !== null && (
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Total Distance
+                        </label>
+                        <div className="p-3 rounded-lg bg-info/10 border border-info/30">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Route Distance:</span>
+                            <span className="text-lg font-semibold text-info">
+                              {totalDistance.toFixed(2)} km
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {calculatedPrice !== null && (
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Total Price
+                        </label>
+                        <div className="p-3 rounded-lg bg-success/10 border border-success/30">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Estimated Cost:</span>
+                            <span className="text-xl font-bold text-success">
+                              ₹{calculatedPrice.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

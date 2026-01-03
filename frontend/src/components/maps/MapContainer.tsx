@@ -24,6 +24,63 @@ interface MapContainerProps {
   clickMarkerType?: 'pickup' | 'destination';
 }
 
+/**
+ * Reverse geocoding utility: Convert coordinates to human-readable address
+ * Uses OpenStreetMap Nominatim API (free, no API key required)
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @returns Formatted address string
+ */
+const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+  try {
+    // Use Nominatim reverse geocoding API
+    // Respect usage policy: https://operations.osmfoundation.org/policies/nominatim/
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'User-Agent': 'RouteX-ParcelFlow/1.0', // Required by Nominatim
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Geocoding failed');
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    // Extract address components
+    const addr = data.address || {};
+    const parts: string[] = [];
+
+    // Build formatted address: Street, City, State, Country
+    if (addr.road || addr.neighbourhood || addr.suburb) {
+      parts.push(addr.road || addr.neighbourhood || addr.suburb);
+    }
+    if (addr.city || addr.town || addr.village) {
+      parts.push(addr.city || addr.town || addr.village);
+    }
+    if (addr.state) {
+      parts.push(addr.state);
+    }
+    if (addr.country) {
+      parts.push(addr.country);
+    }
+
+    // Return formatted address or fallback to display_name
+    return parts.length > 0 ? parts.join(', ') : data.display_name || `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    // Fallback to coordinate display on error
+    return `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+  }
+};
+
 // Create custom icon factory
 const createIcon = (type: MarkerData['type']) => {
   const colors = {
@@ -72,7 +129,7 @@ export function MapContainer({
   const clickMarkerRef = useRef<L.Marker | null>(null);
 
   // Handle map click - captures coordinates when user clicks on map
-  const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
+  const handleMapClick = useCallback(async (e: L.LeafletMouseEvent) => {
     if (!enableClick || !onMapClick || !mapRef.current) return;
 
     const { lat, lng } = e.latlng;
@@ -89,9 +146,16 @@ export function MapContainer({
 
     clickMarkerRef.current = marker;
 
-    // Format address as "Lat: X, Lng: Y" (no geocoding API used per requirements)
-    const address = `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+    // Show temporary loading popup
+    marker.bindPopup('Loading address...').openPopup();
+
+    // Perform reverse geocoding to get human-readable address
+    const address = await reverseGeocode(lat, lng);
     
+    // Update popup with actual address
+    marker.setPopupContent(address).openPopup();
+
+    // Pass location data with real address to parent component
     onMapClick({ lat, lng, address });
   }, [enableClick, onMapClick, clickMarkerType]);
 
