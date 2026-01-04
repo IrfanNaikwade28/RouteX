@@ -50,6 +50,9 @@ class Parcel(models.Model):
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
+        ('requested', 'Requested'),
+        ('accepted', 'Accepted'),
+        ('assigned', 'Assigned'),
         ('picked_up', 'Picked Up'),
         ('in_transit', 'In Transit'),
         ('out_for_delivery', 'Out for Delivery'),
@@ -70,6 +73,36 @@ class Parcel(models.Model):
     to_location = models.CharField(max_length=255)
     pickup_stop_id = models.CharField(max_length=100, blank=True, null=True)
     drop_stop_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Coordinate fields for mapping
+    pickup_lat = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Pickup location latitude"
+    )
+    pickup_lng = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Pickup location longitude"
+    )
+    drop_lat = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Drop location latitude"
+    )
+    drop_lng = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Drop location longitude"
+    )
     
     # Parcel dimensions
     weight = models.DecimalField(
@@ -115,7 +148,7 @@ class Parcel(models.Model):
     current_status = models.CharField(
         max_length=20, 
         choices=STATUS_CHOICES, 
-        default='pending'
+        default='requested'
     )
     
     # Additional details

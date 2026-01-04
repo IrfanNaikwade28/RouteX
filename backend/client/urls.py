@@ -10,7 +10,8 @@ from .views import (
     MarkNotificationAsReadView,
     MarkAllNotificationsAsReadView,
     PricingRuleListView,
-    ParcelStatsView
+    ParcelStatsView,
+    ParcelDriverContactView
 )
 
 app_name = 'client'
@@ -24,6 +25,7 @@ urlpatterns = [
     path('parcels/create/', CreateParcelView.as_view(), name='parcel-create'),
     path('parcels/<int:id>/', ClientParcelDetailView.as_view(), name='parcel-detail'),
     path('parcels/<int:parcel_id>/track/', ParcelTrackingView.as_view(), name='parcel-track'),
+    path('parcels/<int:parcel_id>/driver-contact/', ParcelDriverContactView.as_view(), name='parcel-driver-contact'),
     
     # Statistics
     path('stats/', ParcelStatsView.as_view(), name='parcel-stats'),

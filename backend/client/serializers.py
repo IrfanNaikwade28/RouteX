@@ -122,6 +122,10 @@ class ParcelCreateSerializer(serializers.ModelSerializer):
         fields = [
             'from_location',
             'to_location',
+            'pickup_lat',
+            'pickup_lng',
+            'drop_lat',
+            'drop_lng',
             'pickup_stop_id',
             'drop_stop_id',
             'weight',
@@ -186,12 +190,16 @@ class ParcelCreateSerializer(serializers.ModelSerializer):
         # Save the parcel
         parcel.save()
         
+        # Set initial status to 'requested' (awaiting admin acceptance)
+        parcel.current_status = 'requested'
+        parcel.save(update_fields=['current_status'])
+        
         # Create initial status history
         ParcelStatusHistory.objects.create(
             parcel=parcel,
-            status='pending',
+            status='requested',
             location=parcel.from_location,
-            notes='Parcel created and awaiting pickup',
+            notes='Parcel created and awaiting admin acceptance',
             created_by=client
         )
         

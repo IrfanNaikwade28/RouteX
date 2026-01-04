@@ -281,7 +281,9 @@ class ParcelStatsView(APIView):
         parcels = Parcel.objects.filter(client=request.user)
         
         total_parcels = parcels.count()
-        pending = parcels.filter(current_status='pending').count()
+        requested = parcels.filter(current_status='requested').count()
+        accepted = parcels.filter(current_status='accepted').count()
+        assigned = parcels.filter(current_status='assigned').count()
         in_transit = parcels.filter(current_status='in_transit').count()
         delivered = parcels.filter(current_status='delivered').count()
         cancelled = parcels.filter(current_status='cancelled').count()
@@ -293,9 +295,60 @@ class ParcelStatsView(APIView):
         
         return Response({
             'total_parcels': total_parcels,
-            'pending': pending,
+            'requested': requested,
+            'accepted': accepted,
+            'assigned': assigned,
             'in_transit': in_transit,
             'delivered': delivered,
             'cancelled': cancelled,
             'unread_notifications': unread_notifications
         }, status=status.HTTP_200_OK)
+
+
+class ParcelDriverContactView(APIView):
+    """
+    GET: Get driver contact information for a specific parcel
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsParcelOwner]
+    
+    def get(self, request, parcel_id):
+        """Get driver contact information for a parcel."""
+        parcel = get_object_or_404(
+            Parcel,
+            id=parcel_id,
+            client=request.user
+        )
+        
+        # Check permission
+        self.check_object_permissions(request, parcel)
+        
+        # Get driver assignment
+        try:
+            from track_driver.models import DriverAssignment
+            assignment = DriverAssignment.objects.get(parcel=parcel)
+            driver = assignment.driver
+            
+            # Try to get driver profile from admin_dashboard
+            try:
+                from admin_dashboard.models import Driver as AdminDriver
+                driver_profile = AdminDriver.objects.get(user=driver)
+                return Response({
+                    'driver_id': driver.id,
+                    'driver_name': driver_profile.name,
+                    'driver_phone': driver_profile.phone_number,
+                    'vehicle_number': driver_profile.vehicle_number,
+                    'parcel_tracking_number': parcel.tracking_number,
+                }, status=status.HTTP_200_OK)
+            except AdminDriver.DoesNotExist:
+                return Response({
+                    'driver_id': driver.id,
+                    'driver_name': driver.full_name,
+                    'driver_phone': driver.phone_number,
+                    'vehicle_number': 'N/A',
+                    'parcel_tracking_number': parcel.tracking_number,
+                }, status=status.HTTP_200_OK)
+        except DriverAssignment.DoesNotExist:
+            return Response({
+                'error': 'No driver assigned to this parcel yet'
+            }, status=status.HTTP_404_NOT_FOUND)

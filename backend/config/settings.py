@@ -40,9 +40,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'channels',
     'api',
     'authapp',
     'client',
+    'track_driver',
+    'admin_dashboard',
 ]
 
 MIDDLEWARE = [
@@ -73,6 +76,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 
 # Database
@@ -156,5 +160,12 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
+}
+
+# Django Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
 }
 
