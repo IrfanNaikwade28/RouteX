@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole, mockUsers } from '@/data/mockData';
+import { User, UserRole } from '@/data/mockData';
+import { authAPI } from '@/lib/api';
+import { AxiosError } from 'axios';
 
 interface AuthContextType {
   user: User | null;
@@ -7,6 +9,7 @@ interface AuthContextType {
   login: (email: string, password: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
   signup: (name: string, email: string, password: string, role: UserRole, phone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -14,43 +17,63 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Check for existing session
     const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      setIsAuthenticated(true);
+    const tokens = localStorage.getItem('tokens');
+    
+    if (storedUser && tokens) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('tokens');
+      }
     }
+    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const response = await authAPI.login({ email, password });
+      
+      const { client, tokens } = response.data;
+      
+      // Map backend client data to frontend User structure
+      const userData: User = {
+        id: client.id,
+        email: client.email,
+        name: client.full_name,
+        role: 'client', // Backend only supports client role for now
+        phone: client.phone_number,
+        password: '', // Don't store password
+      };
 
-    // Find user in mock data
-    const foundUser = mockUsers.find(
-      u => u.email.toLowerCase() === email.toLowerCase() && u.password === password && u.role === role
-    );
+      // Store tokens and user data
+      localStorage.setItem('tokens', JSON.stringify(tokens));
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+      
+      setUser(userData);
+      setIsAuthenticated(true);
 
-    if (!foundUser) {
-      // Check if user exists with different credentials
-      const userExists = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (userExists) {
-        if (userExists.role !== role) {
-          return { success: false, error: 'Invalid role selected for this account' };
-        }
-        return { success: false, error: 'Incorrect password' };
+      return { success: true };
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string; errors?: any }>;
+      
+      if (axiosError.response) {
+        const errorMessage = axiosError.response.data?.message || 
+                           axiosError.response.data?.errors?.non_field_errors?.[0] ||
+                           'Login failed. Please check your credentials.';
+        return { success: false, error: errorMessage };
       }
-      return { success: false, error: 'User not found. Please sign up first.' };
+      
+      return { success: false, error: 'Network error. Please check your connection.' };
     }
-
-    setUser(foundUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('currentUser', JSON.stringify(foundUser));
-
-    return { success: true };
   };
 
   const signup = async (
@@ -60,43 +83,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: UserRole,
     phone?: string
   ): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // Backend only supports client registration for now
+      if (!phone) {
+        return { success: false, error: 'Phone number is required' };
+      }
 
-    // Check if user already exists
-    const existingUser = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existingUser) {
-      return { success: false, error: 'User with this email already exists' };
+      const response = await authAPI.register({
+        full_name: name,
+        email,
+        password,
+        phone_number: phone,
+      });
+      
+      const { client, tokens } = response.data;
+      
+      // Map backend client data to frontend User structure
+      const userData: User = {
+        id: client.id,
+        email: client.email,
+        name: client.full_name,
+        role: 'client',
+        phone: client.phone_number,
+        password: '', // Don't store password
+      };
+
+      // Store tokens and user data
+      localStorage.setItem('tokens', JSON.stringify(tokens));
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+      
+      setUser(userData);
+      setIsAuthenticated(true);
+
+      return { success: true };
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string; errors?: any }>;
+      
+      if (axiosError.response) {
+        const errors = axiosError.response.data?.errors;
+        
+        // Handle specific field errors
+        if (errors) {
+          if (errors.email) {
+            return { success: false, error: errors.email[0] };
+          }
+          if (errors.phone_number) {
+            return { success: false, error: errors.phone_number[0] };
+          }
+          if (errors.password) {
+            return { success: false, error: errors.password[0] };
+          }
+        }
+        
+        const errorMessage = axiosError.response.data?.message || 
+                           'Registration failed. Please try again.';
+        return { success: false, error: errorMessage };
+      }
+      
+      return { success: false, error: 'Network error. Please check your connection.' };
     }
-
-    // Create new user (in real app, this would be saved to backend)
-    const newUser: User = {
-      id: `${role}-${Date.now()}`,
-      email,
-      password,
-      name,
-      role,
-      phone,
-    };
-
-    // Add to mock users (this will be lost on refresh in this demo)
-    mockUsers.push(newUser);
-
-    setUser(newUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('currentUser', JSON.stringify(newUser));
-
-    return { success: true };
   };
 
   const logout = () => {
+    authAPI.logout();
     setUser(null);
     setIsAuthenticated(false);
-    localStorage.removeItem('currentUser');
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, signup, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
