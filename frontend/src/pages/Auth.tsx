@@ -55,9 +55,9 @@ export default function Auth() {
 
       let result;
       if (mode === 'login') {
-        result = await login(formData.email, formData.password, selectedRole);
+        result = await login(formData.email, formData.password, selectedRole); // Pass selectedRole during login
       } else {
-        result = await signup(formData.name, formData.email, formData.password, selectedRole, formData.phone);
+        result = await signup(formData.name, formData.email, formData.password, selectedRole, formData.phone); // Pass selectedRole during signup
       }
 
       if (result.success) {
@@ -147,13 +147,7 @@ export default function Auth() {
                     <button
                       key={role}
                       type="button"
-                      onClick={() => {
-                        setSelectedRole(role);
-                        // Auto-switch to login if Driver/Admin selected during signup
-                        if (mode === 'signup' && role !== 'client') {
-                          setMode('login');
-                        }
-                      }}
+                      onClick={() => setSelectedRole(role)} // Update selectedRole
                       className={cn(
                         "relative p-4 rounded-xl border-2 transition-all duration-200",
                         selectedRole === role

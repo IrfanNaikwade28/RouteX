@@ -22,12 +22,12 @@ class ClientRegistrationView(APIView):
         serializer = ClientRegistrationSerializer(data=request.data)
         
         if serializer.is_valid():
-            client = serializer.save()
-            tokens = get_tokens_for_user(client)
+            user = serializer.save()
+            tokens = get_tokens_for_user(user)
             
             return Response({
-                'message': 'Client registered successfully',
-                'client': ClientSerializer(client).data,
+                'message': 'User registered successfully',
+                'user': ClientSerializer(user).data,
                 'tokens': tokens
             }, status=status.HTTP_201_CREATED)
         
@@ -50,7 +50,7 @@ class ClientLoginView(APIView):
             
             return Response({
                 'message': 'Login successful',
-                'client': ClientSerializer(user).data,
+                'user': ClientSerializer(user).data,
                 'tokens': tokens
             }, status=status.HTTP_200_OK)
         

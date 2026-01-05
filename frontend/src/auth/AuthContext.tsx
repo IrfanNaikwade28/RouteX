@@ -40,17 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await authAPI.login({ email, password });
-      
-      const { client, tokens } = response.data;
-      
-      // Map backend client data to frontend User structure
+      const response = await authAPI.login({ email, password, role });
+
+      const { user, tokens } = response.data;
+
+      // Map backend user data to frontend User structure
       const userData: User = {
-        id: client.id,
-        email: client.email,
-        name: client.full_name,
-        role: 'client', // Backend only supports client role for now
-        phone: client.phone_number,
+        id: user.id,
+        email: user.email,
+        name: user.full_name,
+        role: user.role || role,
+        phone: user.phone_number,
         password: '', // Don't store password
       };
 
@@ -94,17 +94,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         phone_number: phone,
+        role,
       });
-      
-      const { client, tokens } = response.data;
-      
-      // Map backend client data to frontend User structure
+
+      const { user, tokens } = response.data;
+
+      // Map backend user data to frontend User structure
       const userData: User = {
-        id: client.id,
-        email: client.email,
-        name: client.full_name,
-        role: 'client',
-        phone: client.phone_number,
+        id: user.id,
+        email: user.email,
+        name: user.full_name,
+        role: user.role || role,
+        phone: user.phone_number,
         password: '', // Don't store password
       };
 

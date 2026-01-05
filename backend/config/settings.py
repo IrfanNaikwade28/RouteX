@@ -133,7 +133,7 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Custom User Model
-AUTH_USER_MODEL = "authapp.Client"
+AUTH_USER_MODEL = "authapp.User"
 
 
 REST_FRAMEWORK = {

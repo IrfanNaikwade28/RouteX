@@ -76,9 +76,10 @@ export const authAPI = {
     email: string;
     password: string;
     phone_number: string;
+    role?: string;
   }) => api.post('/auth/register/', data),
 
-  login: (data: { email: string; password: string }) => 
+  login: (data: { email: string; password: string; role: string }) => 
     api.post('/auth/login/', data),
 
   logout: () => {

@@ -1,90 +1,103 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import Client
+from .models import User
 
 
 class ClientRegistrationSerializer(serializers.ModelSerializer):
-    """Serializer for client registration."""
-    
+    """Serializer for user registration."""
+
     password = serializers.CharField(
         write_only=True,
         required=True,
         style={'input_type': 'password'},
         min_length=8
     )
-    
+
     class Meta:
-        model = Client
-        fields = ['id', 'full_name', 'email', 'phone_number', 'password', 'created_at']
+        model = User
+        fields = ['id', 'full_name', 'email', 'phone_number', 'password', 'role', 'created_at']
         read_only_fields = ['id', 'created_at']
         extra_kwargs = {
             'email': {'required': True},
             'full_name': {'required': True},
-            'phone_number': {'required': True}
+            'phone_number': {'required': True},
+            'role': {'required': True}
         }
-    
+
     def validate_email(self, value):
         """Validate that email is unique."""
-        if Client.objects.filter(email=value).exists():
+        if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value.lower()
-    
+
     def validate_phone_number(self, value):
         """Validate that phone number is unique."""
-        if Client.objects.filter(phone_number=value).exists():
+        if User.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError("A user with this phone number already exists.")
         return value
-    
-    def create(self, validated_data):
-        """Create a new client with hashed password."""
-        password = validated_data.pop('password')
-        client = Client(**validated_data)
-        client.set_password(password)  # Hash the password
-        client.save()
-        return client
 
+    def create(self, validated_data):
+        """Create a new user with hashed password."""
+        password = validated_data.pop('password')
+        role = validated_data.get('role', 'client')
+        user = User(**validated_data)
+        user.set_password(password)
+        
+        # If role is admin, set is_staff and is_superuser
+        if role == 'admin':
+            user.is_staff = True
+            user.is_superuser = True
+        
+        user.save()
+        return user
 
 class ClientLoginSerializer(serializers.Serializer):
-    """Serializer for client login."""
-    
+    """Serializer for user login."""
+
     email = serializers.EmailField(required=True)
     password = serializers.CharField(
         required=True,
         write_only=True,
         style={'input_type': 'password'}
     )
-    
+    role = serializers.ChoiceField(choices=User.ROLE_CHOICES, required=True)
+
     def validate(self, data):
         """Validate credentials and authenticate user."""
         email = data.get('email', '').lower()
         password = data.get('password')
-        
-        if not email or not password:
-            raise serializers.ValidationError("Both email and password are required.")
-        
+        role = data.get('role')
+
+        if not email or not password or not role:
+            raise serializers.ValidationError("Email, password, and role are required.")
+
         # Check if user exists
         try:
-            user = Client.objects.get(email=email)
-        except Client.DoesNotExist:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             raise serializers.ValidationError("Invalid credentials.")
-        
+
         # Check if user is active
         if not user.is_active:
             raise serializers.ValidationError("This account has been deactivated.")
-        
+
+        # Check if role matches
+        if user.role != role:
+            raise serializers.ValidationError("Invalid role for this user.")
+
         # Authenticate user
         user = authenticate(username=email, password=password)
         if not user:
             raise serializers.ValidationError("Invalid credentials.")
-        
+
         data['user'] = user
         return data
 
 
 class ClientSerializer(serializers.ModelSerializer):
-    """Serializer for client details."""
-    
+    """Serializer for user details."""
+
     class Meta:
-        model = Client
-        fields = ['id', 'full_name', 'email', 'phone_number', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        model = User
+        fields = ['id', 'full_name', 'email', 'phone_number', 'role', 'is_active', 'is_staff', 'is_superuser', 'created_at']
+        read_only_fields = ['id', 'is_staff', 'is_superuser', 'created_at']

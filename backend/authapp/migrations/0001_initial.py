@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Client',
+            name='User',
             fields=[
                 ('password', models.CharField(max_length=128, verbose_name='password')),
                 ('last_login', models.DateTimeField(blank=True, null=True, verbose_name='last login')),
@@ -22,6 +22,7 @@ class Migration(migrations.Migration):
                 ('full_name', models.CharField(max_length=100)),
                 ('email', models.EmailField(db_index=True, max_length=254, unique=True)),
                 ('phone_number', models.CharField(max_length=15, unique=True)),
+                ('role', models.CharField(choices=[('admin', 'Admin'), ('client', 'Client'), ('driver', 'Driver')], default='client', max_length=10)),
                 ('is_active', models.BooleanField(default=True)),
                 ('is_staff', models.BooleanField(default=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
@@ -29,9 +30,9 @@ class Migration(migrations.Migration):
                 ('user_permissions', models.ManyToManyField(blank=True, help_text='Specific permissions for this user.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions')),
             ],
             options={
-                'verbose_name': 'Client',
-                'verbose_name_plural': 'Clients',
-                'db_table': 'clients',
+                'verbose_name': 'User',
+                'verbose_name_plural': 'Users',
+                'db_table': 'users',
                 'ordering': ['-created_at'],
             },
         ),
