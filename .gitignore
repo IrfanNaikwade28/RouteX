@@ -31,13 +31,7 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
-staticfiles/
+
 
 # Environments
 .env
@@ -48,12 +42,6 @@ ENV/
 env.bak/
 venv.bak/
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
 
 # Frontend
 node_modules/
