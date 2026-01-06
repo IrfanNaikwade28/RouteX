@@ -294,8 +294,8 @@ export default function Auth() {
                 <p className="text-xs text-muted-foreground mb-2">Demo Credentials:</p>
                 <div className="space-y-1 text-xs">
                   <p><strong>Client:</strong> john@example.com / password123</p>
-                  <p><strong>Driver:</strong> mike@parcelflow.com / password123</p>
-                  <p><strong>Admin:</strong> admin@parcelflow.com / admin123</p>
+                  <p><strong>Driver:</strong> driver@test.com / driverpass123</p>
+                  <p><strong>Admin:</strong> admin@test.com / adminpass123</p>
                 </div>
               </div>
             )}

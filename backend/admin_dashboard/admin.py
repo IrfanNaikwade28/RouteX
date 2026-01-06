@@ -1,12 +1,26 @@
 from django.contrib import admin
 from .models import Driver, AdminAssignment, DriverLocation
 
+from django.contrib import admin
+from .models import Driver
 
 @admin.register(Driver)
 class DriverAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'phone_number', 'vehicle_number', 'is_active', 'user', 'created_at')
-    search_fields = ('name', 'phone_number', 'vehicle_number')
-
+    list_display = (
+        'id', 
+        'name', 
+        'email', 
+        'phone_number', 
+        'vehicle_type', 
+        'vehicle_number', 
+        'is_available', 
+        'rating', 
+        'created_at'
+    )
+    
+    search_fields = ('name', 'email', 'phone_number', 'vehicle_number')
+    
+    list_filter = ('vehicle_type', 'is_available', 'rating', 'created_at')
 
 @admin.register(AdminAssignment)
 class AdminAssignmentAdmin(admin.ModelAdmin):

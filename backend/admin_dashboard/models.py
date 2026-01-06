@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from client.models import Parcel
 
+from django.db import models
+from django.conf import settings
 
 class Driver(models.Model):
     VEHICLE_TYPE_CHOICES = [
@@ -13,10 +15,23 @@ class Driver(models.Model):
     ]
     
     name = models.CharField(max_length=255)
+    # Added EmailField to match the form input
+    email = models.EmailField(max_length=255, unique=True) 
     phone_number = models.CharField(max_length=50)
-    vehicle_number = models.CharField(max_length=100, blank=True)
-    vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPE_CHOICES, default='car', blank=True)
-    is_active = models.BooleanField(default=True)
+    
+    # Removed blank=True because the form marks these with * (Required)
+    vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPE_CHOICES, default='mini_truck') 
+    vehicle_number = models.CharField(max_length=100) 
+    
+    # Added Location field
+    current_location = models.CharField(max_length=255)
+    
+    # Added Rating field (assuming 0-5 scale allows decimals, otherwise use IntegerField)
+    rating = models.FloatField(default=0.0)
+    
+    # Renamed to is_available to match "Driver is currently available" checkbox
+    is_available = models.BooleanField(default=True)
+    
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -31,8 +46,9 @@ class Driver(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.name} ({self.phone_number})"
+        return f"{self.name} ({self.vehicle_number})"
 
+        
 
 class AdminAssignment(models.Model):
     parcel = models.OneToOneField(

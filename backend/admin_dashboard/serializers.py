@@ -3,11 +3,25 @@ from .models import Driver, DriverLocation, AdminAssignment
 from client.models import Parcel
 
 
+from rest_framework import serializers
+from .models import Driver
+
 class DriverSerializer(serializers.ModelSerializer):
     class Meta:
         model = Driver
-        fields = ['id', 'name', 'phone_number', 'vehicle_number', 'vehicle_type', 'is_active', 'user', 'created_at']
-
+        fields = [
+            'id', 
+            'name', 
+            'email',            
+            'phone_number', 
+            'vehicle_type', 
+            'vehicle_number', 
+            'current_location', 
+            'rating',           
+            'is_available',     
+            'user', 
+            'created_at'
+        ]
 
 class ParcelRequestSerializer(serializers.ModelSerializer):
     client_email = serializers.EmailField(source='client.email', read_only=True)
