@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { MapContainer } from '@/components/maps/MapContainer';
+import { LocationSearchInput } from '@/components/maps/LocationSearchInput';
 import { useAuth } from '@/auth/AuthContext';
 import { dataStore } from '@/data/store';
 import { Location, parcelTypes } from '@/data/mockData';
@@ -275,72 +276,35 @@ export default function SendParcel() {
                   Locations
                 </h3>
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Pickup Location
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocationSelect('pickup')}
-                      className={cn(
-                        "w-full p-3 rounded-lg border text-left transition-all",
-                        formData.pickupLocation
-                          ? "border-accent bg-accent/5 text-foreground"
-                          : activeLocationSelect === 'pickup'
-                            ? "border-accent bg-accent/10"
-                            : "border-input hover:border-muted-foreground/30"
-                      )}
-                    >
-                      {formData.pickupLocation ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <i className="fas fa-location-dot text-info"></i>
-                            <span className="font-medium">{formData.pickupLocation.address}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground pl-6">
-                            Lat: {formData.pickupLocation.lat.toFixed(6)}, Lng: {formData.pickupLocation.lng.toFixed(6)}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Click to select on map
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Drop Location
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocationSelect('drop')}
-                      className={cn(
-                        "w-full p-3 rounded-lg border text-left transition-all",
-                        formData.dropLocation
-                          ? "border-accent bg-accent/5 text-foreground"
-                          : activeLocationSelect === 'drop'
-                            ? "border-accent bg-accent/10"
-                            : "border-input hover:border-muted-foreground/30"
-                      )}
-                    >
-                      {formData.dropLocation ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <i className="fas fa-flag-checkered text-destructive"></i>
-                            <span className="font-medium">{formData.dropLocation.address}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground pl-6">
-                            Lat: {formData.dropLocation.lat.toFixed(6)}, Lng: {formData.dropLocation.lng.toFixed(6)}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Click to select on map
-                        </span>
-                      )}
-                    </button>
-                  </div>
+                  <LocationSearchInput
+                    value={formData.pickupLocation}
+                    onChange={(location) => {
+                      setFormData({ ...formData, pickupLocation: location });
+                      setCalculatedPrice(null);
+                      setTotalDistance(null);
+                      setPriceError('');
+                    }}
+                    onMapClick={() => setActiveLocationSelect('pickup')}
+                    label="Pickup Location"
+                    icon="fa-location-dot"
+                    placeholder="Search pickup location..."
+                    showCurrentLocation={true}
+                  />
+
+                  <LocationSearchInput
+                    value={formData.dropLocation}
+                    onChange={(location) => {
+                      setFormData({ ...formData, dropLocation: location });
+                      setCalculatedPrice(null);
+                      setTotalDistance(null);
+                      setPriceError('');
+                    }}
+                    onMapClick={() => setActiveLocationSelect('drop')}
+                    label="Drop Location"
+                    icon="fa-flag-checkered"
+                    placeholder="Search drop location..."
+                    showCurrentLocation={false}
+                  />
                 </div>
               </div>
 

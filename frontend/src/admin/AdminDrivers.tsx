@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { dataStore } from '@/data/store';
-import { Driver } from '@/data/mockData';
+import { Driver, DriverFormData } from '@/types/admin';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { adminAPI } from '@/lib/api';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -31,20 +32,19 @@ const navItems = [
   { label: 'Live Tracking', path: '/admin/tracking', icon: 'fas fa-map-location-dot' },
   { label: 'Drivers', path: '/admin/drivers', icon: 'fas fa-users' },
 ];
-
 // Vehicle type options
-const vehicleTypes = ['Mini Truck', 'Large Truck', 'Van', 'Bike', 'Car'];
+const vehicleTypes = ['bike', 'car', 'van', 'mini_truck', 'large_truck'];
 
-// Driver form state interface
-interface DriverFormData {
+// Local form state (different from API type)
+interface LocalDriverForm {
   name: string;
   email: string;
-  phone: string;
-  vehicleType: string;
-  vehicleNumber: string;
-  isAvailable: boolean;
+  phone_number: string;
+  vehicle_type: string;
+  vehicle_number: string;
+  is_available: boolean;
   rating: number;
-  currentLocation: string;
+  current_location: string;
 }
 
 export default function AdminDrivers() {
@@ -57,16 +57,17 @@ export default function AdminDrivers() {
   const [driverToDelete, setDriverToDelete] = useState<Driver | null>(null);
   
   // Form state
-  const [formData, setFormData] = useState<DriverFormData>({
+  const [formData, setFormData] = useState<LocalDriverForm>({
     name: '',
     email: '',
-    phone: '',
-    vehicleType: vehicleTypes[0],
-    vehicleNumber: '',
-    isAvailable: true,
+    phone_number: '',
+    vehicle_type: vehicleTypes[0],
+    vehicle_number: '',
+    is_available: true,
     rating: 5.0,
-    currentLocation: '',
+    current_location: '',
   });
+  const [isLoading, setIsLoading] = useState(true);
   
   const [formError, setFormError] = useState('');
 
@@ -75,8 +76,17 @@ export default function AdminDrivers() {
     loadDrivers();
   }, []);
 
-  const loadDrivers = () => {
-    setDrivers(dataStore.getDrivers());
+  const loadDrivers = async () => {
+    try {
+      setIsLoading(true);
+      const response = await adminAPI.getDrivers();
+      setDrivers(response.data);
+    } catch (error: any) {
+      console.error('Failed to fetch drivers:', error);
+      toast.error(error.response?.data?.detail || 'Failed to load drivers');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Reset form to initial state
@@ -84,12 +94,12 @@ export default function AdminDrivers() {
     setFormData({
       name: '',
       email: '',
-      phone: '',
-      vehicleType: vehicleTypes[0],
-      vehicleNumber: '',
-      isAvailable: true,
+      phone_number: '',
+      vehicle_type: vehicleTypes[0],
+      vehicle_number: '',
+      is_available: true,
       rating: 5.0,
-      currentLocation: '',
+      current_location: '',
     });
     setFormError('');
     setEditingDriver(null);
@@ -107,19 +117,19 @@ export default function AdminDrivers() {
     setFormData({
       name: driver.name,
       email: driver.email,
-      phone: driver.phone,
-      vehicleType: driver.vehicleType,
-      vehicleNumber: driver.vehicleNumber,
-      isAvailable: driver.isAvailable,
+      phone_number: driver.phone_number,
+      vehicle_type: driver.vehicle_type,
+      vehicle_number: driver.vehicle_number,
+      is_available: driver.is_available,
       rating: driver.rating,
-      currentLocation: driver.currentLocation.address,
+      current_location: driver.current_location || '',
     });
     setFormError('');
     setIsFormModalOpen(true);
   };
 
   // Handle form input changes
-  const handleInputChange = (field: keyof DriverFormData, value: string | boolean | number) => {
+  const handleInputChange = (field: keyof LocalDriverForm, value: string | boolean | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setFormError(''); // Clear error when user types
   };
@@ -140,16 +150,12 @@ export default function AdminDrivers() {
       setFormError('Please enter a valid email address');
       return false;
     }
-    if (!formData.phone.trim()) {
+    if (!formData.phone_number.trim()) {
       setFormError('Phone number is required');
       return false;
     }
-    if (!formData.vehicleNumber.trim()) {
+    if (!formData.vehicle_number.trim()) {
       setFormError('Vehicle number is required');
-      return false;
-    }
-    if (!formData.currentLocation.trim()) {
-      setFormError('Current location is required');
       return false;
     }
     if (formData.rating < 0 || formData.rating > 5) {
@@ -160,57 +166,62 @@ export default function AdminDrivers() {
   };
 
   // Submit form (create or update)
-  const handleSubmitForm = () => {
+  const handleSubmitForm = async () => {
     if (!validateForm()) return;
 
-    if (editingDriver) {
-      // Update existing driver
-      const result = dataStore.updateDriver(editingDriver.id, {
+    try {
+      // Prepare data for backend (exclude user field for create/update)
+      const dataToSend = {
         name: formData.name,
         email: formData.email,
-        phone: formData.phone,
-        vehicleType: formData.vehicleType,
-        vehicleNumber: formData.vehicleNumber,
-        isAvailable: formData.isAvailable,
+        phone_number: formData.phone_number,
+        vehicle_type: formData.vehicle_type,
+        vehicle_number: formData.vehicle_number,
+        current_location: formData.current_location || '',
         rating: formData.rating,
-        currentLocation: {
-          lat: editingDriver.currentLocation.lat, // Keep existing coordinates
-          lng: editingDriver.currentLocation.lng,
-          address: formData.currentLocation,
-        },
-      });
+        is_available: formData.is_available,
+      };
 
-      if (result.success) {
-        loadDrivers(); // Refresh list
-        setIsFormModalOpen(false);
-        resetForm();
-      } else {
-        setFormError(result.error || 'Failed to update driver');
-      }
-    } else {
-      // Create new driver
-      const result = dataStore.addDriver({
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        vehicleType: formData.vehicleType,
-        vehicleNumber: formData.vehicleNumber,
-        isAvailable: formData.isAvailable,
-        rating: formData.rating,
-        currentLocation: {
-          lat: 40.7128, // Default coordinates (New York)
-          lng: -74.006,
-          address: formData.currentLocation,
-        },
-      });
+      console.log('Sending driver data:', dataToSend);
 
-      if (result.success) {
-        loadDrivers(); // Refresh list
-        setIsFormModalOpen(false);
-        resetForm();
+      if (editingDriver) {
+        // Update existing driver
+        await adminAPI.updateDriver(editingDriver.id, dataToSend);
+        toast.success('Driver updated successfully');
       } else {
-        setFormError(result.error || 'Failed to create driver');
+        // Create new driver
+        await adminAPI.createDriver(dataToSend);
+        toast.success('Driver created successfully');
       }
+      await loadDrivers(); // Refresh list
+      setIsFormModalOpen(false);
+      resetForm();
+    } catch (error: any) {
+      console.error('Failed to save driver:', error);
+      console.error('Error response:', error.response?.data);
+      const errorData = error.response?.data;
+      let errorMessage = 'Failed to save driver';
+      
+      if (errorData) {
+        // Handle field-specific errors
+        if (errorData.email) {
+          errorMessage = `Email: ${errorData.email[0]}`;
+        } else if (errorData.phone_number) {
+          errorMessage = `Phone: ${errorData.phone_number[0]}`;
+        } else if (errorData.vehicle_number) {
+          errorMessage = `Vehicle Number: ${errorData.vehicle_number[0]}`;
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.non_field_errors) {
+          errorMessage = errorData.non_field_errors[0];
+        } else {
+          // If we have error data but none of the above, show it as JSON
+          errorMessage = JSON.stringify(errorData);
+        }
+      }
+      
+      setFormError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -221,22 +232,33 @@ export default function AdminDrivers() {
   };
 
   // Confirm and execute delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!driverToDelete) return;
 
-    const result = dataStore.deleteDriver(driverToDelete.id);
-    
-    if (result.success) {
-      loadDrivers(); // Refresh list
+    try {
+      await adminAPI.deleteDriver(driverToDelete.id);
+      toast.success('Driver deleted successfully');
+      await loadDrivers(); // Refresh list
       setIsDeleteDialogOpen(false);
       setDriverToDelete(null);
-    } else {
-      // Show error (in production, use a toast notification)
-      alert(result.error);
+    } catch (error: any) {
+      console.error('Failed to delete driver:', error);
+      const errorMessage = error.response?.data?.detail || 'Failed to delete driver';
+      toast.error(errorMessage);
       setIsDeleteDialogOpen(false);
       setDriverToDelete(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout navItems={navItems} title="Driver Management">
+        <div className="flex items-center justify-center h-64">
+          <i className="fas fa-spinner fa-spin text-4xl text-muted-foreground"></i>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navItems={navItems} title="Driver Management">
@@ -263,11 +285,11 @@ export default function AdminDrivers() {
             <div className="flex items-start gap-4 mb-4">
               <div className={cn(
                 "w-14 h-14 rounded-xl flex items-center justify-center",
-                driver.isAvailable ? "bg-success/15" : "bg-muted"
+                driver.is_available ? "bg-success/15" : "bg-muted"
               )}>
                 <i className={cn(
                   "fas fa-user text-xl",
-                  driver.isAvailable ? "text-success" : "text-muted-foreground"
+                  driver.is_available ? "text-success" : "text-muted-foreground"
                 )}></i>
               </div>
               <div className="flex-1">
@@ -275,11 +297,11 @@ export default function AdminDrivers() {
                   <h3 className="font-semibold">{driver.name}</h3>
                   <span className={cn(
                     "px-2 py-1 rounded-full text-xs font-medium",
-                    driver.isAvailable 
+                    driver.is_available 
                       ? "bg-success/15 text-success" 
                       : "bg-muted text-muted-foreground"
                   )}>
-                    {driver.isAvailable ? 'Available' : 'Busy'}
+                    {driver.is_available ? 'Available' : 'Busy'}
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground">{driver.email}</p>
@@ -289,15 +311,15 @@ export default function AdminDrivers() {
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
                 <span className="text-sm text-muted-foreground">Vehicle</span>
-                <span className="text-sm font-medium">{driver.vehicleType}</span>
+                <span className="text-sm font-medium">{driver.vehicle_type}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
                 <span className="text-sm text-muted-foreground">Number</span>
-                <span className="text-sm font-medium">{driver.vehicleNumber}</span>
+                <span className="text-sm font-medium">{driver.vehicle_number}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
                 <span className="text-sm text-muted-foreground">Phone</span>
-                <span className="text-sm font-medium">{driver.phone}</span>
+                <span className="text-sm font-medium">{driver.phone_number}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
                 <span className="text-sm text-muted-foreground">Rating</span>
@@ -310,7 +332,7 @@ export default function AdminDrivers() {
 
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground mb-1">Current Location</p>
-              <p className="text-sm truncate">{driver.currentLocation.address}</p>
+              <p className="text-sm truncate">{driver.current_location || 'Not set'}</p>
             </div>
 
             {/* Action buttons */}
@@ -379,8 +401,8 @@ export default function AdminDrivers() {
               <label className="text-sm font-medium">Phone *</label>
               <Input
                 placeholder="+1 555-0000"
-                value={formData.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
+                value={formData.phone_number}
+                onChange={(e) => handleInputChange('phone_number', e.target.value)}
               />
             </div>
 
@@ -390,8 +412,8 @@ export default function AdminDrivers() {
               <select
                 id="vehicleType"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={formData.vehicleType}
-                onChange={(e) => handleInputChange('vehicleType', e.target.value)}
+                value={formData.vehicle_type}
+                onChange={(e) => handleInputChange('vehicle_type', e.target.value)}
               >
                 {vehicleTypes.map(type => (
                   <option key={type} value={type}>{type}</option>
@@ -404,18 +426,18 @@ export default function AdminDrivers() {
               <label className="text-sm font-medium">Vehicle Number *</label>
               <Input
                 placeholder="TRK-001"
-                value={formData.vehicleNumber}
-                onChange={(e) => handleInputChange('vehicleNumber', e.target.value)}
+                value={formData.vehicle_number}
+                onChange={(e) => handleInputChange('vehicle_number', e.target.value)}
               />
             </div>
 
             {/* Current Location */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Current Location *</label>
+              <label className="text-sm font-medium">Current Location</label>
               <Input
                 placeholder="123 Main St, New York"
-                value={formData.currentLocation}
-                onChange={(e) => handleInputChange('currentLocation', e.target.value)}
+                value={formData.current_location}
+                onChange={(e) => handleInputChange('current_location', e.target.value)}
               />
             </div>
 
@@ -427,8 +449,11 @@ export default function AdminDrivers() {
                 min="0"
                 max="5"
                 step="0.1"
-                value={formData.rating}
-                onChange={(e) => handleInputChange('rating', parseFloat(e.target.value))}
+                value={isNaN(formData.rating) ? 0 : formData.rating}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                  handleInputChange('rating', isNaN(value) ? 0 : value);
+                }}
               />
             </div>
 
@@ -437,8 +462,8 @@ export default function AdminDrivers() {
               <input
                 type="checkbox"
                 id="isAvailable"
-                checked={formData.isAvailable}
-                onChange={(e) => handleInputChange('isAvailable', e.target.checked)}
+                checked={formData.is_available}
+                onChange={(e) => handleInputChange('is_available', e.target.checked)}
                 className="w-4 h-4 rounded border-input"
               />
               <label htmlFor="isAvailable" className="text-sm font-medium cursor-pointer">

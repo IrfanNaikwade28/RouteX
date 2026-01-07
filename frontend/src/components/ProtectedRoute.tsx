@@ -8,8 +8,17 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading } = useAuth();
   const location = useLocation();
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <i className="fas fa-spinner fa-spin text-4xl text-muted-foreground"></i>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/auth" state={{ from: location }} replace />;

@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { StatusBadge } from '@/components/StatusBadge';
-import { dataStore } from '@/data/store';
-import { Parcel, Driver } from '@/data/mockData';
+import { ParcelRequest, Driver } from '@/types/admin';
 import { cn } from '@/lib/utils';
+import { adminAPI } from '@/lib/api';
+import { toast } from 'sonner';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: 'fas fa-home' },
@@ -14,59 +15,133 @@ const navItems = [
   { label: 'Drivers', path: '/admin/drivers', icon: 'fas fa-users' },
 ];
 
-type TabType = 'pending' | 'accepted' | 'in-transit' | 'delivered';
+type TabType = 'pending' | 'accepted' | 'assigned' | 'in-transit' | 'delivered';
 
 export default function AdminRequests() {
   const navigate = useNavigate();
-  const [parcels, setParcels] = useState<Parcel[]>([]);
+  const [parcels, setParcels] = useState<ParcelRequest[]>([]);
+  const [allParcels, setAllParcels] = useState<ParcelRequest[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('pending');
-  const [selectedParcel, setSelectedParcel] = useState<string | null>(null);
-  const [selectedDriver, setSelectedDriver] = useState<string>('');
+  const [selectedParcel, setSelectedParcel] = useState<number | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<number | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setParcels(dataStore.getParcels());
-    setDrivers(dataStore.getAvailableDrivers());
+    fetchData();
   }, []);
 
-  const refreshData = () => {
-    setParcels(dataStore.getParcels());
-    setDrivers(dataStore.getAvailableDrivers());
+  useEffect(() => {
+    filterParcels();
+  }, [activeTab, allParcels]);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [parcelsRes, driversRes] = await Promise.all([
+        adminAPI.getParcelRequests(),
+        adminAPI.getDrivers(),
+      ]);
+      
+      setAllParcels(parcelsRes.data);
+      setDrivers(driversRes.data.filter((d: Driver) => d.is_available));
+    } catch (error: any) {
+      console.error('Failed to fetch data:', error);
+      toast.error(error.response?.data?.detail || 'Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleAccept = (parcelId: string) => {
-    dataStore.acceptParcel(parcelId);
-    refreshData();
+  const filterParcels = () => {
+    const statusMap: Record<TabType, string[]> = {
+      pending: ['requested'],
+      accepted: ['accepted'],
+      assigned: ['assigned'],
+      'in-transit': ['in_transit', 'picked_up', 'out_for_delivery'],
+      delivered: ['delivered'],
+    };
+
+    const filtered = allParcels.filter(p => 
+      statusMap[activeTab].includes(p.current_status)
+    );
+    setParcels(filtered);
   };
 
-  const handleReject = (parcelId: string) => {
-    dataStore.rejectParcel(parcelId);
-    refreshData();
+  const handleAccept = async (parcelId: number) => {
+    try {
+      await adminAPI.acceptParcel(parcelId);
+      toast.success('Parcel accepted successfully');
+      await fetchData();
+    } catch (error: any) {
+      console.error('Failed to accept parcel:', error);
+      toast.error(error.response?.data?.detail || 'Failed to accept parcel');
+    }
   };
 
-  const handleAssignDriver = (parcelId: string) => {
-    if (!selectedDriver) return;
-    dataStore.assignDriver(parcelId, selectedDriver);
-    setSelectedParcel(null);
-    setSelectedDriver('');
-    refreshData();
+  const handleReject = async (parcelId: number) => {
+    try {
+      await adminAPI.rejectParcel(parcelId, 'Rejected by admin');
+      toast.success('Parcel rejected');
+      await fetchData();
+    } catch (error: any) {
+      console.error('Failed to reject parcel:', error);
+      toast.error(error.response?.data?.detail || 'Failed to reject parcel');
+    }
   };
 
-  const statusMap: Record<TabType, string> = {
-    pending: 'requested',
-    accepted: 'accepted',
-    'in-transit': 'in-transit',
-    delivered: 'delivered',
+  const handleAssignDriver = async (parcelId: number) => {
+    if (!selectedDriver) {
+      toast.error('Please select a driver');
+      return;
+    }
+
+    try {
+      await adminAPI.assignDriver({
+        parcel_id: parcelId,
+        driver_id: selectedDriver,
+      });
+      toast.success('Driver assigned successfully');
+      setSelectedParcel(null);
+      setSelectedDriver(undefined);
+      await fetchData();
+    } catch (error: any) {
+      console.error('Failed to assign driver:', error);
+      toast.error(error.response?.data?.detail || 'Failed to assign driver');
+    }
   };
 
-  const filteredParcels = parcels.filter(p => p.status === statusMap[activeTab]);
+  const getTabCounts = () => {
+    return {
+      pending: allParcels.filter(p => p.current_status === 'requested').length,
+      accepted: allParcels.filter(p => p.current_status === 'accepted').length,
+      assigned: allParcels.filter(p => p.current_status === 'assigned').length,
+      'in-transit': allParcels.filter(p => 
+        ['in_transit', 'picked_up', 'out_for_delivery'].includes(p.current_status)
+      ).length,
+      delivered: allParcels.filter(p => p.current_status === 'delivered').length,
+    };
+  };
 
-  const tabs: { id: TabType; label: string; icon: string; count: number }[] = [
-    { id: 'pending', label: 'Pending', icon: 'fa-clock', count: parcels.filter(p => p.status === 'requested').length },
-    { id: 'accepted', label: 'Accepted', icon: 'fa-check', count: parcels.filter(p => p.status === 'accepted').length },
-    { id: 'in-transit', label: 'In Transit', icon: 'fa-truck', count: parcels.filter(p => p.status === 'in-transit').length },
-    { id: 'delivered', label: 'Delivered', icon: 'fa-check-double', count: parcels.filter(p => p.status === 'delivered').length },
+  const tabs: { id: TabType; label: string; icon: string }[] = [
+    { id: 'pending', label: 'Pending', icon: 'fa-clock' },
+    { id: 'accepted', label: 'Accepted', icon: 'fa-check' },
+    { id: 'assigned', label: 'Assigned', icon: 'fa-user-check' },
+    { id: 'in-transit', label: 'In Transit', icon: 'fa-truck' },
+    { id: 'delivered', label: 'Delivered', icon: 'fa-check-double' },
   ];
+
+  const tabCounts = getTabCounts();
+
+  if (isLoading) {
+    return (
+      <DashboardLayout navItems={navItems} title="Parcel Requests">
+        <div className="flex items-center justify-center h-64">
+          <i className="fas fa-spinner fa-spin text-4xl text-muted-foreground"></i>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navItems={navItems} title="Parcel Requests">
@@ -85,12 +160,12 @@ export default function AdminRequests() {
           >
             <i className={`fas ${tab.icon}`}></i>
             {tab.label}
-            {tab.count > 0 && (
+            {tabCounts[tab.id] > 0 && (
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-xs",
                 activeTab === tab.id ? "bg-primary-foreground/20" : "bg-muted"
               )}>
-                {tab.count}
+                {tabCounts[tab.id]}
               </span>
             )}
           </button>
@@ -99,13 +174,13 @@ export default function AdminRequests() {
 
       {/* Parcel List */}
       <div className="space-y-4">
-        {filteredParcels.length === 0 ? (
+        {parcels.length === 0 ? (
           <div className="card-elevated p-12 text-center">
             <i className="fas fa-inbox text-4xl text-muted-foreground mb-4"></i>
             <p className="text-muted-foreground">No {activeTab} requests</p>
           </div>
         ) : (
-          filteredParcels.map((parcel) => (
+          parcels.map((parcel) => (
             <motion.div
               key={parcel.id}
               initial={{ opacity: 0, y: 10 }}
@@ -118,28 +193,23 @@ export default function AdminRequests() {
                     <i className="fas fa-box text-primary"></i>
                   </div>
                   <div>
-                    <p className="font-semibold">#{parcel.id.slice(-8).toUpperCase()}</p>
+                    <p className="font-semibold">{parcel.tracking_number}</p>
                     <p className="text-sm text-muted-foreground">
-                      {parcel.parcelType} • {parcel.weight}kg • {parcel.size}{parcel.height && parcel.width ? ` • ${parcel.height}×${parcel.width}m` : ''}
+                      {parcel.weight}kg
                     </p>
                   </div>
                 </div>
-                <StatusBadge status={parcel.status} />
+                <StatusBadge status={parcel.current_status} />
               </div>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 <div className="p-3 rounded-lg bg-secondary/50">
                   <p className="text-xs text-muted-foreground mb-1">Client</p>
-                  <p className="font-medium">{parcel.clientName}</p>
-                  <p className="text-sm text-muted-foreground">{parcel.contactNumber}</p>
+                  <p className="font-medium">{parcel.client_email}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/50">
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {parcel.driverName ? 'Assigned Driver' : 'Driver'}
-                  </p>
-                  <p className="font-medium">
-                    {parcel.driverName || 'Not assigned'}
-                  </p>
+                  <p className="text-xs text-muted-foreground mb-1">Description</p>
+                  <p className="font-medium text-sm">{parcel.description || 'No description'}</p>
                 </div>
               </div>
 
@@ -148,20 +218,20 @@ export default function AdminRequests() {
                   <i className="fas fa-location-dot text-info mt-0.5"></i>
                   <div>
                     <p className="text-xs text-muted-foreground">Pickup</p>
-                    <p>{parcel.pickupLocation.address}</p>
+                    <p>{parcel.from_location}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/5 border border-destructive/20">
                   <i className="fas fa-flag-checkered text-destructive mt-0.5"></i>
                   <div>
                     <p className="text-xs text-muted-foreground">Drop</p>
-                    <p>{parcel.dropLocation.address}</p>
+                    <p>{parcel.to_location}</p>
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
-              {parcel.status === 'requested' && (
+              {parcel.current_status === 'requested' && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleAccept(parcel.id)}
@@ -180,19 +250,19 @@ export default function AdminRequests() {
                 </div>
               )}
 
-              {parcel.status === 'accepted' && (
+              {parcel.current_status === 'accepted' && (
                 <div className="space-y-3">
                   {selectedParcel === parcel.id ? (
                     <div className="flex gap-2">
                       <select
-                        value={selectedDriver}
-                        onChange={(e) => setSelectedDriver(e.target.value)}
+                        value={selectedDriver || ''}
+                        onChange={(e) => setSelectedDriver(Number(e.target.value))}
                         className="flex-1 input-field"
                       >
                         <option value="">Select a driver</option>
                         {drivers.map((driver) => (
                           <option key={driver.id} value={driver.id}>
-                            {driver.name} - {driver.vehicleType} ({driver.vehicleNumber})
+                            {driver.name} - {driver.vehicle_type} ({driver.vehicle_number})
                           </option>
                         ))}
                       </select>
@@ -206,7 +276,7 @@ export default function AdminRequests() {
                       <button
                         onClick={() => {
                           setSelectedParcel(null);
-                          setSelectedDriver('');
+                          setSelectedDriver(undefined);
                         }}
                         className="px-4 py-2 rounded-lg bg-secondary text-foreground font-medium hover:bg-secondary/80 transition-colors"
                       >
@@ -225,7 +295,7 @@ export default function AdminRequests() {
                 </div>
               )}
 
-              {parcel.status === 'in-transit' && (
+              {['in_transit', 'picked_up', 'out_for_delivery'].includes(parcel.current_status) && (
                 <button
                   onClick={() => navigate(`/admin/tracking?parcel=${parcel.id}`)}
                   className="w-full py-2.5 rounded-lg bg-accent text-accent-foreground font-medium hover:bg-accent/90 transition-colors flex items-center justify-center gap-2"

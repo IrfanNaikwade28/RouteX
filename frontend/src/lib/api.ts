@@ -88,3 +88,28 @@ export const authAPI = {
     localStorage.removeItem('currentUser');
   },
 };
+
+// Admin API endpoints
+export const adminAPI = {
+  // Drivers
+  getDrivers: () => api.get('/admin/drivers/'),
+  getDriver: (id: number) => api.get(`/admin/drivers/${id}/`),
+  createDriver: (data: any) => api.post('/admin/drivers/', data),
+  updateDriver: (id: number, data: any) => api.put(`/admin/drivers/${id}/`, data),
+  deleteDriver: (id: number) => api.delete(`/admin/drivers/${id}/`),
+
+  // Parcel Requests
+  getParcelRequests: () => api.get('/admin/parcel-requests/'),
+  acceptParcel: (id: number) => api.patch(`/admin/parcel-requests/${id}/accept/`),
+  rejectParcel: (id: number, notes?: string) => 
+    api.patch(`/admin/parcel-requests/${id}/reject/`, { notes }),
+  
+  // Driver Assignment
+  assignDriver: (data: { parcel_id: number; driver_id: number }) => 
+    api.post('/admin/assign-driver/', data),
+  
+  // Live Tracking
+  getLiveDrivers: () => api.get('/admin/live-drivers/'),
+  getLiveParcels: () => api.get('/admin/live-parcels/'),
+  getParcelRoute: (parcelId: number) => api.get(`/admin/parcel/${parcelId}/route/`),
+};

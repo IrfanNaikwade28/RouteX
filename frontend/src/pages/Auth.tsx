@@ -293,9 +293,9 @@ export default function Auth() {
               <div className="mt-6 p-4 rounded-lg bg-secondary">
                 <p className="text-xs text-muted-foreground mb-2">Demo Credentials:</p>
                 <div className="space-y-1 text-xs">
-                  <p><strong>Client:</strong> john@example.com / password123</p>
-                  <p><strong>Driver:</strong> driver@test.com / driverpass123</p>
-                  <p><strong>Admin:</strong> admin@test.com / adminpass123</p>
+                  <p><strong>Client:</strong> client@routex.com / client123</p>
+                  <p><strong>Driver:</strong> driver@routex.com / driver123</p>
+                  <p><strong>Admin:</strong> admin@routex.com / admin123</p>
                 </div>
               </div>
             )}

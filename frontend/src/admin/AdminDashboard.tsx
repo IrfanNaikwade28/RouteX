@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { StatusBadge } from '@/components/StatusBadge';
-import { dataStore } from '@/data/store';
-import { Parcel, Driver } from '@/data/mockData';
+import { adminAPI } from '@/lib/api';
+import { Driver, ParcelRequest, AdminStats } from '@/types/admin';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: 'fas fa-home' },
@@ -14,7 +15,7 @@ const navItems = [
 ];
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<AdminStats>({
     totalParcels: 0,
     pendingRequests: 0,
     inTransit: 0,
@@ -22,27 +23,63 @@ export default function AdminDashboard() {
     activeDrivers: 0,
     totalDrivers: 0,
   });
-  const [recentParcels, setRecentParcels] = useState<Parcel[]>([]);
+  const [recentParcels, setRecentParcels] = useState<ParcelRequest[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const parcels = dataStore.getParcels();
-    const drivers = dataStore.getDrivers();
-
-    setStats({
-      totalParcels: parcels.length,
-      pendingRequests: parcels.filter(p => p.status === 'requested').length,
-      inTransit: parcels.filter(p => p.status === 'in-transit').length,
-      delivered: parcels.filter(p => p.status === 'delivered').length,
-      activeDrivers: drivers.filter(d => d.isAvailable).length,
-      totalDrivers: drivers.length,
-    });
-
-    setRecentParcels(
-      parcels
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5)
-    );
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [parcelsRes, driversRes] = await Promise.all([
+        adminAPI.getParcelRequests(),
+        adminAPI.getDrivers(),
+      ]);
+
+      const parcels = parcelsRes.data as ParcelRequest[];
+      const driversData = driversRes.data as Driver[];
+
+      setDrivers(driversData);
+
+      // Calculate stats
+      setStats({
+        totalParcels: parcels.length,
+        pendingRequests: parcels.filter(p => p.current_status === 'requested').length,
+        inTransit: parcels.filter(p => 
+          ['in_transit', 'picked_up', 'out_for_delivery'].includes(p.current_status)
+        ).length,
+        delivered: parcels.filter(p => p.current_status === 'delivered').length,
+        activeDrivers: driversData.filter(d => d.is_available).length,
+        totalDrivers: driversData.length,
+      });
+
+      // Get recent parcels (last 5)
+      setRecentParcels(parcels.slice(0, 5));
+    } catch (error: any) {
+      console.error('Failed to fetch dashboard data:', error);
+      toast.error(error.response?.data?.detail || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getDriverName = (parcelId: number): string => {
+    // In real scenario, you'd get this from parcel assignments
+    return 'Not assigned';
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout navItems={navItems} title="Admin Dashboard">
+        <div className="flex items-center justify-center h-64">
+          <i className="fas fa-spinner fa-spin text-4xl text-muted-foreground"></i>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navItems={navItems} title="Admin Dashboard">
@@ -121,44 +158,48 @@ export default function AdminDashboard() {
           <h3 className="font-semibold text-lg">Recent Activity</h3>
           <a href="/admin/requests" className="text-sm text-accent hover:underline">View all</a>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">ID</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Client</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Route</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Driver</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentParcels.map((parcel) => (
-                <tr key={parcel.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                  <td className="p-4">
-                    <span className="font-medium">#{parcel.id.slice(-8).toUpperCase()}</span>
-                  </td>
-                  <td className="p-4">
-                    <p className="font-medium">{parcel.clientName}</p>
-                    <p className="text-sm text-muted-foreground">{parcel.contactNumber}</p>
-                  </td>
-                  <td className="p-4 max-w-[200px]">
-                    <p className="text-sm truncate">{parcel.pickupLocation.address}</p>
-                    <p className="text-sm text-muted-foreground truncate">→ {parcel.dropLocation.address}</p>
-                  </td>
-                  <td className="p-4">
-                    <span className={parcel.driverName ? "text-foreground" : "text-muted-foreground"}>
-                      {parcel.driverName || 'Not assigned'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <StatusBadge status={parcel.status} />
-                  </td>
+        {recentParcels.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <i className="fas fa-inbox text-3xl mb-2"></i>
+            <p>No recent activity</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Tracking #</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Client</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Route</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Weight</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {recentParcels.map((parcel) => (
+                  <tr key={parcel.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                    <td className="p-4">
+                      <span className="font-medium">{parcel.tracking_number}</span>
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm text-muted-foreground">{parcel.client_email}</p>
+                    </td>
+                    <td className="p-4 max-w-[200px]">
+                      <p className="text-sm truncate">{parcel.from_location}</p>
+                      <p className="text-sm text-muted-foreground truncate">→ {parcel.to_location}</p>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-sm">{parcel.weight} kg</span>
+                    </td>
+                    <td className="p-4">
+                      <StatusBadge status={parcel.current_status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
