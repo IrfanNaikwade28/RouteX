@@ -11,7 +11,8 @@ from .views import (
     MarkAllNotificationsAsReadView,
     PricingRuleListView,
     ParcelStatsView,
-    ParcelDriverContactView
+    ParcelDriverContactView,
+    CalculatePriceView,
 )
 
 app_name = 'client'
@@ -38,4 +39,6 @@ urlpatterns = [
     
     # Pricing Rules
     path('pricing-rules/', PricingRuleListView.as_view(), name='pricing-rules'),
+    # Price calculator (returns computed price for given weight/distance)
+    path('pricing/calculate/', CalculatePriceView.as_view(), name='pricing-calculate'),
 ]

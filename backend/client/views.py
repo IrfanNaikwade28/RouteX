@@ -17,6 +17,7 @@ from .serializers import (
     PricingRuleSerializer
 )
 from .permissions import IsOwnerOrReadOnly, IsParcelOwner
+from decimal import Decimal, InvalidOperation
 
 
 class ClientProfileView(APIView):
@@ -267,6 +268,83 @@ class PricingRuleListView(generics.ListAPIView):
     def get_queryset(self):
         """Return only active pricing rules."""
         return PricingRule.objects.filter(is_active=True).order_by('min_weight')
+
+
+class CalculatePriceView(APIView):
+    """
+    GET/POST: Calculate price without creating a parcel.
+
+    Request params (GET) or JSON body (POST):
+      - weight: required, numeric (kg)
+      - distance_km: optional, numeric (km)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _parse_decimal(self, value, name):
+        try:
+            dec = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValueError(f"Invalid decimal for {name}")
+        return dec
+
+    def _calculate(self, weight, distance_km):
+        # Create an in-memory Parcel instance and reuse its pricing logic
+        parcel = Parcel(weight=weight, distance_km=distance_km)
+        price = parcel.calculate_price(distance_km=distance_km)
+        return parcel, price
+
+    def get(self, request):
+        weight = request.query_params.get('weight')
+        distance = request.query_params.get('distance_km', '0')
+
+        if weight is None:
+            return Response({'error': 'weight is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            weight_dec = self._parse_decimal(weight, 'weight')
+            distance_dec = self._parse_decimal(distance, 'distance_km')
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if weight_dec <= 0:
+            return Response({'error': 'weight must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST)
+        if distance_dec < 0:
+            return Response({'error': 'distance_km cannot be negative'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parcel, price = self._calculate(weight_dec, distance_dec)
+
+        return Response({
+            'weight': str(weight_dec),
+            'distance_km': str(distance_dec),
+            'price': str(price)
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        weight = request.data.get('weight')
+        distance = request.data.get('distance_km', '0')
+
+        if weight is None:
+            return Response({'error': 'weight is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            weight_dec = self._parse_decimal(weight, 'weight')
+            distance_dec = self._parse_decimal(distance, 'distance_km')
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if weight_dec <= 0:
+            return Response({'error': 'weight must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST)
+        if distance_dec < 0:
+            return Response({'error': 'distance_km cannot be negative'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parcel, price = self._calculate(weight_dec, distance_dec)
+
+        return Response({
+            'weight': str(weight_dec),
+            'distance_km': str(distance_dec),
+            'price': str(price)
+        }, status=status.HTTP_200_OK)
 
 
 class ParcelStatsView(APIView):
