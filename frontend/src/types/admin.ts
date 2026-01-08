@@ -38,6 +38,7 @@ export interface ParcelRequest {
   weight: number;
   description: string;
   current_status: 'requested' | 'accepted' | 'assigned' | 'in_transit' | 'picked_up' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'rejected';
+  driver_name: string | null;
   created_at: string;
 }
 

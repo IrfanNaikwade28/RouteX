@@ -25,7 +25,7 @@ class DriverTasksView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get all assigned parcels for the driver (status: assigned, picked_up, in_transit, out_for_delivery)."""
+        """Get all assigned parcels for the driver (including delivered ones)."""
         print(f"[DEBUG] Driver tasks requested by user: {request.user.email} (ID: {request.user.id})")
         
         # Get all driver assignments for the current user
@@ -37,13 +37,13 @@ class DriverTasksView(APIView):
         for assignment in assignments:
             print(f"[DEBUG] Assignment ID: {assignment.id}, Parcel: {assignment.parcel.tracking_number}, Status: {assignment.parcel.current_status}")
         
-        # Get parcels with status in ['assigned', 'picked_up', 'in_transit', 'out_for_delivery'] from assignments
+        # Get ALL parcels from assignments (including delivered ones)
+        # Frontend will handle filtering by status for active/completed tabs
         parcels = Parcel.objects.filter(
-            id__in=[assignment.parcel.id for assignment in assignments],
-            current_status__in=['assigned', 'picked_up', 'in_transit', 'out_for_delivery']
+            id__in=[assignment.parcel.id for assignment in assignments]
         ).select_related('client').order_by('-created_at')
         
-        print(f"[DEBUG] Returning {parcels.count()} parcels after status filter")
+        print(f"[DEBUG] Returning {parcels.count()} total parcels (including delivered)")
         
         serializer = DriverTaskSerializer(parcels, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

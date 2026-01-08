@@ -220,6 +220,17 @@ export default function AdminRequests() {
                 </div>
               </div>
 
+              {/* Driver Info for Delivered Parcels */}
+              {parcel.current_status === 'delivered' && parcel.driver_name && (
+                <div className="mb-4 p-3 rounded-lg bg-success/10 border border-success/20">
+                  <p className="text-xs text-muted-foreground mb-1">Delivered by</p>
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-user-check text-success"></i>
+                    <p className="font-medium text-success">{parcel.driver_name}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2 text-sm mb-4">
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-info/5 border border-info/20">
                   <i className="fas fa-location-dot text-info mt-0.5"></i>

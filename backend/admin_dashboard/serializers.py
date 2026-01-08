@@ -71,14 +71,24 @@ class DriverSerializer(serializers.ModelSerializer):
 
 class ParcelRequestSerializer(serializers.ModelSerializer):
     client_email = serializers.EmailField(source='client.email', read_only=True)
+    driver_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Parcel
         fields = [
             'id', 'tracking_number', 'client', 'client_email',
             'from_location', 'to_location', 'pickup_lat', 'pickup_lng', 'drop_lat', 'drop_lng',
-            'weight', 'description', 'current_status', 'created_at'
+            'weight', 'description', 'current_status', 'driver_name', 'created_at'
         ]
+    
+    def get_driver_name(self, obj):
+        """Return the driver name if parcel is assigned to a driver."""
+        try:
+            if hasattr(obj, 'admin_assignment') and obj.admin_assignment:
+                return obj.admin_assignment.driver.name
+        except AdminAssignment.DoesNotExist:
+            pass
+        return None
 
 
 class AssignDriverSerializer(serializers.Serializer):
