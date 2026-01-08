@@ -118,6 +118,7 @@ export default function AdminTracking() {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          console.log(`[AdminTracking] Received WebSocket message for parcel ${parcelId}:`, message);
           
           if (message.type === 'driver_location') {
             const location: DriverLocation = {
@@ -126,6 +127,8 @@ export default function AdminTracking() {
               address: message.address,
               timestamp: message.timestamp,
             };
+            
+            console.log(`[AdminTracking] Updating driver location for parcel ${parcelId}:`, location);
             
             // Update driver location in state
             setLiveDrivers(prev => {
@@ -141,13 +144,15 @@ export default function AdminTracking() {
             });
             
             // Update parcel's driver location
-            setLiveParcels(prev => 
-              prev.map(p => 
+            setLiveParcels(prev => {
+              const updated = prev.map(p => 
                 p.id === parcelId
                   ? { ...p, driver_location: location }
                   : p
-              )
-            );
+              );
+              console.log('[AdminTracking] Updated liveParcels:', updated);
+              return updated;
+            });
           } else if (message.type === 'tracking_ended') {
             // Remove parcel from live tracking when delivered
             ws.close();
@@ -225,15 +230,39 @@ export default function AdminTracking() {
       );
 
       // Show driver location if available
-      const driverData = liveDrivers.find(d => d.driver_id === selectedParcelRoute.driver?.driver_id);
-      if (driverData && driverData.latitude && driverData.longitude) {
+      const parcel = liveParcels.find(p => p.id === selectedParcelRoute.parcel_id);
+      
+      console.log('[AdminTracking] Checking driver location for parcel:', {
+        parcelId: selectedParcelRoute.parcel_id,
+        parcel,
+        hasDriverLocation: !!parcel?.driver_location,
+        driverLocation: parcel?.driver_location
+      });
+      
+      // Check for driver location from WebSocket updates
+      if (parcel?.driver_location) {
+        console.log('[AdminTracking] Adding live driver marker:', parcel.driver_location);
         markers.push({
-          id: `driver-${driverData.driver_id}`,
-          position: [Number(driverData.latitude), Number(driverData.longitude)],
+          id: `driver-live-${selectedParcelRoute.parcel_id}`,
+          position: [parcel.driver_location.lat, parcel.driver_location.lng],
           type: 'driver',
-          popup: `Driver: ${selectedParcelRoute.driver?.driver_name || 'Unknown'}`,
+          popup: `Driver: ${selectedParcelRoute.driver?.driver_name || 'Unknown'} (Live)`,
           label: selectedParcelRoute.driver?.driver_name,
         });
+      } else {
+        console.log('[AdminTracking] No driver_location found, checking fallback driver data');
+        // Fallback to driver data from initial load
+        const driverData = liveDrivers.find(d => d.driver_id === selectedParcelRoute.driver?.driver_id);
+        console.log('[AdminTracking] Fallback driver data:', driverData);
+        if (driverData && driverData.latitude && driverData.longitude) {
+          markers.push({
+            id: `driver-${driverData.driver_id}`,
+            position: [Number(driverData.latitude), Number(driverData.longitude)],
+            type: 'driver',
+            popup: `Driver: ${selectedParcelRoute.driver?.driver_name || 'Unknown'}`,
+            label: selectedParcelRoute.driver?.driver_name,
+          });
+        }
       }
     } else {
       // Show all active drivers
@@ -355,10 +384,16 @@ export default function AdminTracking() {
                           {Number(parcel.latitude).toFixed(4)}, {Number(parcel.longitude).toFixed(4)}
                         </p>
                       )}
+                      {parcel.driver_location && (
+                        <p className="text-green-600 dark:text-green-400 truncate text-xs">
+                          <i className="fas fa-circle text-[6px] animate-pulse mr-1"></i>
+                          Live: {parcel.driver_location.lat.toFixed(4)}, {parcel.driver_location.lng.toFixed(4)}
+                        </p>
+                      )}
                     </div>
-                    {driver && driver.latitude && driver.longitude && (
-                      <div className="mt-2 p-2 rounded bg-accent/10 text-xs">
-                        <span className="text-accent font-medium">
+                    {parcel.driver_location && (
+                      <div className="mt-2 p-2 rounded bg-green-500/10 text-xs">
+                        <span className="text-green-600 dark:text-green-400 font-medium">
                           <i className="fas fa-circle text-[8px] animate-pulse mr-1"></i>
                           Live tracking active
                         </span>

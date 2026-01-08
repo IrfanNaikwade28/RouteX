@@ -244,18 +244,18 @@ export default function DriverNavigation() {
     
     // Route logic based on parcel status
     if (status === 'assigned') {
-      // Show: Driver → Pickup
+      // Show: Driver → Pickup (driver needs to go to pickup first)
       return {
         start: currentLocation,
         end: [routeData.pickup_lat, routeData.pickup_lng],
-        label: 'To Pickup Location'
+        label: 'Go to Pickup Location'
       };
     } else if (['picked_up', 'in_transit', 'out_for_delivery'].includes(status)) {
-      // Show: Driver → Drop
+      // Show: Driver → Drop (after pickup, go to drop)
       return {
         start: currentLocation,
         end: [routeData.drop_lat, routeData.drop_lng],
-        label: 'To Drop Location'
+        label: 'Go to Drop Location'
       };
     }
     
@@ -423,6 +423,87 @@ export default function DriverNavigation() {
                     )}
                   </div>
                 </div>
+                
+                {/* Route Progress Indicator */}
+                <div className="mb-4 p-4 rounded-lg bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-3">
+                    <i className="fas fa-route mr-1"></i>
+                    Delivery Journey
+                  </p>
+                  <div className="flex items-center justify-between">
+                    {/* Step 1: Pickup */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center mb-2",
+                        selectedTask.current_status === 'assigned' 
+                          ? "bg-blue-500 text-white ring-4 ring-blue-200 dark:ring-blue-900" 
+                          : "bg-green-500 text-white"
+                      )}>
+                        {['assigned'].includes(selectedTask.current_status) ? (
+                          <i className="fas fa-location-dot text-sm"></i>
+                        ) : (
+                          <i className="fas fa-check text-sm"></i>
+                        )}
+                      </div>
+                      <p className="text-xs font-medium text-center">Pickup</p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        {selectedTask.current_status === 'assigned' ? 'Go here first' : 'Completed'}
+                      </p>
+                    </div>
+                    
+                    {/* Arrow */}
+                    <div className="flex-shrink-0 px-2">
+                      <i className="fas fa-arrow-right text-blue-400"></i>
+                    </div>
+                    
+                    {/* Step 2: In Transit */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center mb-2",
+                        ['picked_up', 'in_transit', 'out_for_delivery'].includes(selectedTask.current_status)
+                          ? "bg-blue-500 text-white ring-4 ring-blue-200 dark:ring-blue-900"
+                          : "bg-gray-300 dark:bg-gray-700 text-gray-500"
+                      )}>
+                        <i className="fas fa-truck text-sm"></i>
+                      </div>
+                      <p className="text-xs font-medium text-center">In Transit</p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        {['picked_up', 'in_transit', 'out_for_delivery'].includes(selectedTask.current_status) 
+                          ? 'Current step' 
+                          : 'Pending'}
+                      </p>
+                    </div>
+                    
+                    {/* Arrow */}
+                    <div className="flex-shrink-0 px-2">
+                      <i className="fas fa-arrow-right text-green-400"></i>
+                    </div>
+                    
+                    {/* Step 3: Drop */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center mb-2",
+                        selectedTask.current_status === 'delivered'
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 dark:bg-gray-700 text-gray-500"
+                      )}>
+                        <i className="fas fa-flag-checkered text-sm"></i>
+                      </div>
+                      <p className="text-xs font-medium text-center">Drop</p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        {selectedTask.current_status === 'delivered' ? 'Completed' : 'Final step'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Current instruction */}
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      {getRoutePoints()?.label || 'Waiting for instructions...'}
+                    </p>
+                  </div>
+                </div>
+                
                 <div className="h-[400px] rounded-lg overflow-hidden">
                   {routeData && currentLocation ? (
                     <MapContainer
