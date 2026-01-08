@@ -31,10 +31,17 @@ class TrackingConsumer(AsyncWebsocketConsumer):
         self.user_id = str(self.user.id)
         self.parcel_id = params.get('parcel_id', None)
         
-        # Check if user is a driver (has driver assignments) or client (owns parcels)
+        # Check user role: admin, driver, or client
+        is_admin = await self.is_admin(self.user.id)
         is_driver = await self.is_driver(self.user.id)
         
-        if is_driver:
+        if is_admin:
+            # Admin can view all parcels (read-only)
+            print(f"[DEBUG] Admin connected: {self.user.email}")
+            self.role = 'admin'
+            self.driver_id = None
+            # Admin doesn't need driver group
+        elif is_driver:
             # Join driver group for location updates
             self.driver_group_name = f'driver_{self.user_id}'
             await self.channel_layer.group_add(
@@ -44,12 +51,14 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             self.driver_id = self.user_id
         else:
             # Client tracking mode - only subscribe to parcels
+            print(f"[DEBUG] Client connected: {self.user.email}")
+            self.role = 'client'
             self.driver_id = None
         
-        # Join parcel group if parcel_id is provided (for both drivers and clients)
+        # Join parcel group if parcel_id is provided (for drivers, clients, and admins)
         if self.parcel_id:
-            # Verify access: driver must be assigned, client must own the parcel
-            has_access = await self.verify_parcel_access(self.user.id, self.parcel_id, is_driver)
+            # Verify access: admin has full access, driver must be assigned, client must own
+            has_access = await self.verify_parcel_access(self.user.id, self.parcel_id, is_driver, is_admin)
             if has_access:
                 self.parcel_group_name = f'parcel_{self.parcel_id}'
                 await self.channel_layer.group_add(
@@ -91,10 +100,10 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             
             # Only drivers can send location updates
             if message_type == 'location_update':
-                if not hasattr(self, 'driver_id') or not self.driver_id:
+                if not hasattr(self, 'role') or self.role != 'driver' or not self.driver_id:
                     await self.send(text_data=json.dumps({
                         'type': 'error',
-                        'message': 'Only drivers can send location updates'
+                        'message': 'Only assigned drivers can send location updates'
                     }))
                     return
                 await self.handle_location_update(data)
@@ -160,9 +169,12 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 f'parcel_{p_id}',
                 {
-                    'type': 'location_update',
+                    'type': 'driver_location',
                     'driver_id': self.user_id,
-                    'location': location_payload,
+                    'lat': float(lat),
+                    'lng': float(lng),
+                    'address': address,
+                    'timestamp': timezone.now().isoformat(),
                     'parcel_id': p_id
                 }
             )
@@ -172,9 +184,12 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 f'parcel_{parcel_id}',
                 {
-                    'type': 'location_update',
+                    'type': 'driver_location',
                     'driver_id': self.user_id,
-                    'location': location_payload,
+                    'lat': float(lat),
+                    'lng': float(lng),
+                    'address': address,
+                    'timestamp': timezone.now().isoformat(),
                     'parcel_id': parcel_id
                 }
             )
@@ -184,9 +199,12 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 self.driver_group_name,
                 {
-                    'type': 'location_update',
+                    'type': 'driver_location',
                     'driver_id': self.user_id,
-                    'location': location_payload,
+                    'lat': float(lat),
+                    'lng': float(lng),
+                    'address': address,
+                    'timestamp': timezone.now().isoformat(),
                     'parcel_id': parcel_id
                 }
             )
@@ -199,6 +217,24 @@ class TrackingConsumer(AsyncWebsocketConsumer):
                 driver_id=driver_id,
                 parcel__current_status__in=['assigned', 'picked_up', 'in_transit', 'out_for_delivery']
             ).values_list('parcel_id', flat=True)
+            
+            # Check if any parcel has been delivered and send tracking_ended
+            delivered_parcels = DriverAssignment.objects.filter(
+                driver_id=driver_id,
+                parcel__current_status='delivered'
+            ).values_list('parcel_id', flat=True)
+            
+            # Send tracking_ended message for delivered parcels
+            for parcel_id in delivered_parcels:
+                self.channel_layer.group_send(
+                    f'parcel_{parcel_id}',
+                    {
+                        'type': 'tracking_ended',
+                        'parcel_id': parcel_id,
+                        'message': 'Parcel has been delivered. Tracking has ended.'
+                    }
+                )
+            
             return list(assignments)
         except Exception as e:
             print(f"Error getting assigned parcels: {e}")
@@ -245,14 +281,34 @@ class TrackingConsumer(AsyncWebsocketConsumer):
                 'parcel_id': parcel_id
             }))
     
-    async def location_update(self, event):
-        """Send location update to WebSocket."""
+    async def driver_location(self, event):
+        """Send driver location update to WebSocket (handler for channel layer)."""
         await self.send(text_data=json.dumps({
-            'type': 'location_update',
+            'type': 'driver_location',
             'driver_id': event['driver_id'],
-            'location': event['location'],
+            'lat': event['lat'],
+            'lng': event['lng'],
+            'address': event['address'],
+            'timestamp': event['timestamp'],
             'parcel_id': event.get('parcel_id')
         }))
+    
+    async def tracking_ended(self, event):
+        """Send tracking_ended message to WebSocket (handler for channel layer)."""
+        await self.send(text_data=json.dumps({
+            'type': 'tracking_ended',
+            'parcel_id': event['parcel_id'],
+            'message': event['message']
+        }))
+    
+    @database_sync_to_async
+    def is_admin(self, user_id):
+        """Check if user is an admin."""
+        try:
+            user = User.objects.get(id=user_id)
+            return user.role == 'admin'
+        except User.DoesNotExist:
+            return False
     
     @database_sync_to_async
     def is_driver(self, user_id):
@@ -263,9 +319,13 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             return False
     
     @database_sync_to_async
-    def verify_parcel_access(self, user_id, parcel_id, is_driver):
+    def verify_parcel_access(self, user_id, parcel_id, is_driver, is_admin=False):
         """Verify user has access to track this parcel."""
         try:
+            # Admin has access to all parcels
+            if is_admin:
+                return Parcel.objects.filter(id=parcel_id).exists()
+            
             parcel = Parcel.objects.get(id=parcel_id)
             if is_driver:
                 # Driver must be assigned to this parcel

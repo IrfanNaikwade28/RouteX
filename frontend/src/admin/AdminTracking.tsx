@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -8,6 +8,7 @@ import { adminAPI } from '@/lib/api';
 import { LiveDriver, LiveParcel, ParcelRoute } from '@/types/admin';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { DriverLocation } from '@/types/tracking';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: 'fas fa-home' },
@@ -23,14 +24,23 @@ export default function AdminTracking() {
   const [selectedParcelId, setSelectedParcelId] = useState<number | null>(null);
   const [selectedParcelRoute, setSelectedParcelRoute] = useState<ParcelRoute | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // WebSocket connections map: parcelId -> WebSocket
+  const wsConnectionsRef = useRef<Map<number, WebSocket>>(new Map());
+  const reconnectAttemptsRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     loadLiveData();
     
-    // Poll for updates every 10 seconds
-    const interval = setInterval(loadLiveData, 10000);
-    
-    return () => clearInterval(interval);
+    return () => {
+      // Cleanup all WebSocket connections on unmount
+      wsConnectionsRef.current.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      });
+      wsConnectionsRef.current.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -64,6 +74,21 @@ export default function AdminTracking() {
 
       setLiveParcels(parcels);
       setLiveDrivers(drivers);
+      
+      // Connect WebSockets for each active parcel
+      parcels.forEach(parcel => {
+        if (!wsConnectionsRef.current.has(parcel.id)) {
+          connectParcelWebSocket(parcel.id);
+        }
+      });
+      
+      // Disconnect WebSockets for parcels no longer active
+      wsConnectionsRef.current.forEach((ws, parcelId) => {
+        if (!parcels.find(p => p.id === parcelId)) {
+          ws.close();
+          wsConnectionsRef.current.delete(parcelId);
+        }
+      });
     } catch (error: any) {
       console.error('Failed to load live tracking data:', error);
       if (!isLoading) {
@@ -71,6 +96,91 @@ export default function AdminTracking() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const connectParcelWebSocket = (parcelId: number) => {
+    const tokens = localStorage.getItem('tokens');
+    if (!tokens) return;
+    
+    const { access } = JSON.parse(tokens);
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+    const url = `${wsUrl}/ws/tracking/?parcel_id=${parcelId}&token=${access}`;
+    
+    try {
+      const ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        console.log(`[AdminTracking] WebSocket connected for parcel ${parcelId}`);
+        reconnectAttemptsRef.current.set(parcelId, 0);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'driver_location') {
+            const location: DriverLocation = {
+              lat: message.lat,
+              lng: message.lng,
+              address: message.address,
+              timestamp: message.timestamp,
+            };
+            
+            // Update driver location in state
+            setLiveDrivers(prev => {
+              const existing = prev.find(d => d.driver_id === message.driver_id);
+              if (existing) {
+                return prev.map(d => 
+                  d.driver_id === message.driver_id
+                    ? { ...d, current_location: location }
+                    : d
+                );
+              }
+              return prev;
+            });
+            
+            // Update parcel's driver location
+            setLiveParcels(prev => 
+              prev.map(p => 
+                p.id === parcelId
+                  ? { ...p, driver_location: location }
+                  : p
+              )
+            );
+          } else if (message.type === 'tracking_ended') {
+            // Remove parcel from live tracking when delivered
+            ws.close();
+            wsConnectionsRef.current.delete(parcelId);
+            setLiveParcels(prev => prev.filter(p => p.id !== parcelId));
+            toast.info(`Tracking ended for parcel #${parcelId}`);
+          }
+        } catch (error) {
+          console.error(`[AdminTracking] Failed to parse message for parcel ${parcelId}:`, error);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error(`[AdminTracking] WebSocket error for parcel ${parcelId}:`, error);
+      };
+      
+      ws.onclose = () => {
+        console.log(`[AdminTracking] WebSocket closed for parcel ${parcelId}`);
+        wsConnectionsRef.current.delete(parcelId);
+        
+        // Attempt reconnection (max 3 attempts)
+        const attempts = reconnectAttemptsRef.current.get(parcelId) || 0;
+        if (attempts < 3) {
+          setTimeout(() => {
+            reconnectAttemptsRef.current.set(parcelId, attempts + 1);
+            connectParcelWebSocket(parcelId);
+          }, 3000);
+        }
+      };
+      
+      wsConnectionsRef.current.set(parcelId, ws);
+    } catch (error) {
+      console.error(`[AdminTracking] Failed to create WebSocket for parcel ${parcelId}:`, error);
     }
   };
 

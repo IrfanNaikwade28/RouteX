@@ -68,6 +68,24 @@ class ParcelDetailSerializer(serializers.ModelSerializer):
     client_phone = serializers.CharField(source='client.phone_number', read_only=True)
     status_display = serializers.CharField(source='get_current_status_display', read_only=True)
     status_history = ParcelStatusHistorySerializer(many=True, read_only=True)
+    driver_location = serializers.SerializerMethodField()
+    
+    def get_driver_location(self, obj):
+        """Get the driver's last known location for this parcel."""
+        try:
+            from track_driver.models import DriverLocation
+            # Get most recent location for this parcel
+            last_location = DriverLocation.objects.filter(parcel=obj).order_by('-timestamp').first()
+            if last_location:
+                return {
+                    'lat': float(last_location.latitude),
+                    'lng': float(last_location.longitude),
+                    'address': last_location.address,
+                    'timestamp': last_location.timestamp.isoformat(),
+                }
+        except Exception as e:
+            print(f"Error getting driver location: {e}")
+        return None
     
     class Meta:
         model = Parcel
@@ -95,6 +113,7 @@ class ParcelDetailSerializer(serializers.ModelSerializer):
             'description',
             'special_instructions',
             'status_history',
+            'driver_location',
             'created_at',
             'updated_at'
         ]

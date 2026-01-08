@@ -101,24 +101,45 @@ export default function DriverNavigation() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const newLocation: [number, number] = [position.coords.latitude, position.coords.longitude];
+          console.log('[Driver] GPS Location obtained:', {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date(position.timestamp).toISOString()
+          });
           setCurrentLocation(newLocation);
           
           // Send location update via WebSocket if tracking is enabled
           if (isTrackingEnabled && selectedTask && connectionState === 'connected') {
+            console.log('[Driver] Sending location via WebSocket');
             sendLocationUpdate({
               lat: position.coords.latitude,
               lng: position.coords.longitude,
-              address: 'Current location', // Will be geocoded server-side if needed
+              address: `Lat: ${position.coords.latitude.toFixed(6)}, Lng: ${position.coords.longitude.toFixed(6)}`,
+            });
+          } else {
+            console.log('[Driver] Not sending location:', {
+              isTrackingEnabled,
+              hasTask: !!selectedTask,
+              connectionState
             });
           }
         },
         (error) => {
-          console.error('Failed to get location:', error);
+          console.error('[Driver] Geolocation error:', error.code, error.message);
+          toast.error(`Location access denied: ${error.message}`);
           // Default to Mumbai if geolocation fails
           setCurrentLocation([19.0760, 72.8777]);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
       );
     } else {
+      console.error('[Driver] Geolocation not supported');
+      toast.error('Geolocation is not supported by your browser');
       setCurrentLocation([19.0760, 72.8777]);
     }
   };
@@ -148,7 +169,7 @@ export default function DriverNavigation() {
       // Update location every 5 seconds
       locationIntervalRef.current = setInterval(() => {
         getCurrentLocation();
-      }, 5000);
+      }, 15000);
     } else {
       if (locationIntervalRef.current) {
         clearInterval(locationIntervalRef.current);
@@ -214,6 +235,31 @@ export default function DriverNavigation() {
       return [(routeData.pickup_lat + routeData.drop_lat) / 2, (routeData.pickup_lng + routeData.drop_lng) / 2];
     }
     return [19.0760, 72.8777];
+  };
+
+  const getRoutePoints = (): { start: [number, number]; end: [number, number]; label: string } | null => {
+    if (!selectedTask || !routeData || !currentLocation) return null;
+    
+    const status = selectedTask.current_status;
+    
+    // Route logic based on parcel status
+    if (status === 'assigned') {
+      // Show: Driver → Pickup
+      return {
+        start: currentLocation,
+        end: [routeData.pickup_lat, routeData.pickup_lng],
+        label: 'To Pickup Location'
+      };
+    } else if (['picked_up', 'in_transit', 'out_for_delivery'].includes(status)) {
+      // Show: Driver → Drop
+      return {
+        start: currentLocation,
+        end: [routeData.drop_lat, routeData.drop_lng],
+        label: 'To Drop Location'
+      };
+    }
+    
+    return null;
   };
 
   const getMapMarkers = () => {
@@ -383,9 +429,9 @@ export default function DriverNavigation() {
                       center={getMapCenter()}
                       zoom={13}
                       markers={getMapMarkers()}
-                      showRoute={true}
-                      routeStart={currentLocation}
-                      routeEnd={[routeData.drop_lat, routeData.drop_lng]}
+                      showRoute={!!getRoutePoints()}
+                      routeStart={getRoutePoints()?.start}
+                      routeEnd={getRoutePoints()?.end}
                     />
                   ) : (
                     <div className="h-full bg-secondary/50 rounded-lg flex items-center justify-center">
@@ -428,6 +474,21 @@ export default function DriverNavigation() {
                       Special Instructions
                     </p>
                     <p className="text-sm">{selectedTask.special_instructions}</p>
+                  </div>
+                )}
+
+                {/* Debug Info */}
+                {isTrackingEnabled && (
+                  <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Live Tracking Status
+                    </p>
+                    <div className="text-xs space-y-1 text-blue-800 dark:text-blue-200">
+                      <p>• WebSocket: <span className="font-mono">{connectionState}</span></p>
+                      <p>• GPS: {currentLocation ? `${currentLocation[0].toFixed(6)}, ${currentLocation[1].toFixed(6)}` : 'Not available'}</p>
+                      <p>• Sending: {isTrackingEnabled && connectionState === 'connected' ? 'Every 5 seconds' : 'Paused'}</p>
+                    </div>
                   </div>
                 )}
 

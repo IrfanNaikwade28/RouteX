@@ -125,7 +125,7 @@ export default function SendParcel() {
    * Handle Calculate Price button click
    * Validates required fields and calculates total delivery cost
    */
-  const handleCalculatePrice = () => {
+  const handleCalculatePrice = async () => {
     setPriceError('');
 
     // Validation: Check if pickup and drop locations exist
@@ -140,12 +140,6 @@ export default function SendParcel() {
       return;
     }
 
-    // Validation: Check if breadth is filled
-    if (!formData.breadth || parseFloat(formData.breadth) <= 0) {
-      setPriceError('Please enter a valid parcel breadth');
-      return;
-    }
-
     // Calculate distance between pickup and drop locations
     const distanceKm = calculateDistance(
       formData.pickupLocation.lat,
@@ -155,16 +149,22 @@ export default function SendParcel() {
     );
 
     // Store calculated distance (rounded to 2 decimals)
-    setTotalDistance(Math.round(distanceKm * 100) / 100);
+    const roundedDistance = Math.round(distanceKm * 100) / 100;
+    setTotalDistance(roundedDistance);
 
-    // Calculate price based on distance and parcel details
-    const price = calculatePrice(
-      distanceKm,
-      parseFloat(formData.weight),
-      parseFloat(formData.breadth)
-    );
+    try {
+      // Call backend API to calculate price
+      const response = await clientAPI.calculatePrice({
+        weight: parseFloat(formData.weight),
+        distance_km: roundedDistance,
+      });
 
-    setCalculatedPrice(price);
+      const price = parseFloat(response.data.price);
+      setCalculatedPrice(price);
+    } catch (error: any) {
+      console.error('Failed to calculate price:', error);
+      setPriceError(error.response?.data?.error || 'Failed to calculate price. Please try again.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -79,6 +79,9 @@ export default function TrackParcel() {
       const response = await clientAPI.getParcel(parcelId);
       const parcelDetail = response.data;
       setSelectedParcel(parcelDetail);
+      
+      // Clear previous driver location - will be populated by WebSocket
+      setLiveDriverLocation(null);
 
       // Load driver contact if parcel has a driver
       if (parcelDetail.driver) {
@@ -182,6 +185,31 @@ export default function TrackParcel() {
       isFinite(lat2) &&
       isFinite(lng2)
     );
+  };
+
+  const getRoutePoints = (): { start: [number, number]; end: [number, number]; show: boolean } | null => {
+    if (!selectedParcel || !liveDriverLocation) return null;
+    
+    const status = selectedParcel.current_status;
+    
+    // Route logic based on parcel status
+    if (status === 'assigned') {
+      // Show: Driver → Pickup
+      return {
+        start: [liveDriverLocation.lat, liveDriverLocation.lng],
+        end: [Number(selectedParcel.pickup_lat!), Number(selectedParcel.pickup_lng!)],
+        show: true
+      };
+    } else if (['picked_up', 'in_transit', 'out_for_delivery'].includes(status)) {
+      // Show: Driver → Drop
+      return {
+        start: [liveDriverLocation.lat, liveDriverLocation.lng],
+        end: [Number(selectedParcel.drop_lat!), Number(selectedParcel.drop_lng!)],
+        show: true
+      };
+    }
+    
+    return null;
   };
 
   return (
@@ -298,14 +326,18 @@ export default function TrackParcel() {
                       center={getMapCenter()}
                       zoom={13}
                       markers={getMapMarkers()}
-                      showRoute={selectedParcel.current_status === 'in_transit' || selectedParcel.current_status === 'out_for_delivery'}
-                      routeStart={[Number(selectedParcel.pickup_lat!), Number(selectedParcel.pickup_lng!)]}
-                      routeEnd={[Number(selectedParcel.drop_lat!), Number(selectedParcel.drop_lng!)]}
+                      showRoute={getRoutePoints()?.show || false}
+                      routeStart={getRoutePoints()?.start}
+                      routeEnd={getRoutePoints()?.end}
                     />
                   </div>
                 ) : (
                   <div className="h-[300px] lg:h-[400px] rounded-lg bg-secondary/50 flex items-center justify-center">
-                    <p className="text-muted-foreground">Location data not available</p>
+                    <div className="text-center">
+                      <i className="fas fa-map-location-dot text-4xl text-muted-foreground mb-3"></i>
+                      <p className="text-muted-foreground">Waiting for driver's live location...</p>
+                      <p className="text-sm text-muted-foreground/70 mt-1">Driver needs to enable live tracking</p>
+                    </div>
                   </div>
                 )}
                 {/* Live location info */}

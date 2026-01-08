@@ -141,6 +141,10 @@ export const clientAPI = {
 
   // Pricing Rules
   getPricingRules: () => api.get('/client/pricing-rules/'),
+  
+  // Price Calculation
+  calculatePrice: (data: { weight: number; distance_km: number }) => 
+    api.post('/client/pricing/calculate/', data),
 };
 
 // Driver API endpoints

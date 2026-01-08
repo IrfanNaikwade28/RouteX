@@ -18,6 +18,7 @@ export type MessageType =
   | 'unsubscribe_parcel'
   | 'subscribed'
   | 'unsubscribed'
+  | 'tracking_ended'
   | 'error';
 
 // Outgoing message: Driver -> Server (location update)
@@ -31,9 +32,12 @@ export interface LocationUpdateMessage {
 
 // Incoming message: Server -> Client (broadcast)
 export interface DriverLocationMessage {
-  type: 'location_update';
+  type: 'driver_location';
   driver_id: string;
-  location: DriverLocation;
+  lat: number;
+  lng: number;
+  address: string;
+  timestamp: string;
   parcel_id?: number;
 }
 
@@ -64,11 +68,18 @@ export interface ErrorMessage {
   message: string;
 }
 
+export interface TrackingEndedMessage {
+  type: 'tracking_ended';
+  parcel_id: number;
+  message: string;
+}
+
 // Union type for all incoming messages
 export type IncomingMessage = 
   | DriverLocationMessage
   | SubscribedMessage
   | UnsubscribedMessage
+  | TrackingEndedMessage
   | ErrorMessage;
 
 // Union type for all outgoing messages

@@ -78,15 +78,21 @@ export function useTrackingSocket({
       const message: IncomingMessage = JSON.parse(event.data);
 
       switch (message.type) {
-        case 'location_update':
+        case 'driver_location':
           const location: DriverLocation = {
-            lat: message.location.lat,
-            lng: message.location.lng,
-            address: message.location.address,
-            timestamp: new Date().toISOString(),
+            lat: message.lat,
+            lng: message.lng,
+            address: message.address,
+            timestamp: message.timestamp || new Date().toISOString(),
           };
           setDriverLocation(location);
           onLocationUpdate?.(location, message.driver_id);
+          break;
+
+        case 'tracking_ended':
+          console.log(`[TrackingSocket] Tracking ended for parcel ${message.parcel_id}: ${message.message}`);
+          // Auto-disconnect when delivery is complete
+          disconnect();
           break;
 
         case 'subscribed':
