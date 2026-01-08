@@ -8,6 +8,8 @@ import { clientAPI } from '@/lib/api';
 import { ParcelList, ParcelDetail, DriverContact } from '@/types/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useTrackingSocket } from '@/hooks/useTrackingSocket';
+import { DriverLocation } from '@/types/tracking';
 
 const navItems = [
   { label: 'Dashboard', path: '/client', icon: 'fas fa-home' },
@@ -23,6 +25,28 @@ export default function TrackParcel() {
   const [driverContact, setDriverContact] = useState<DriverContact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [liveDriverLocation, setLiveDriverLocation] = useState<DriverLocation | null>(null);
+
+  // WebSocket tracking for selected parcel (client is read-only)
+  const { connectionState, driverLocation } = useTrackingSocket({
+    parcelId: selectedParcel?.id || 0,
+    autoConnect: !!selectedParcel?.id,
+    onLocationUpdate: (location, driverId) => {
+      console.log(`[Client] Received driver location update from driver ${driverId}:`, location);
+      setLiveDriverLocation(location);
+      toast.success('Driver location updated', { duration: 2000 });
+    },
+    onError: (error) => {
+      console.error('[Client] Tracking error:', error);
+      // Only show error toast if it's a critical error, not connection issues
+      if (!error.includes('reconnect')) {
+        toast.error(`Tracking error: ${error}`);
+      }
+    },
+    onConnectionChange: (state) => {
+      console.log(`[Client] Tracking connection state: ${state}`);
+    },
+  });
 
   // Load all parcels
   useEffect(() => {
@@ -107,6 +131,17 @@ export default function TrackParcel() {
         label: 'Destination',
       },
     ];
+
+    // Add live driver marker if available
+    if (liveDriverLocation) {
+      markers.push({
+        id: 'driver-live',
+        position: [liveDriverLocation.lat, liveDriverLocation.lng],
+        type: 'driver',
+        popup: `Driver: ${liveDriverLocation.address || 'Current location'}`,
+        label: 'Driver',
+      });
+    }
 
     return markers;
   };
@@ -226,7 +261,36 @@ export default function TrackParcel() {
                       {selectedParcel.height && selectedParcel.width && ` • ${selectedParcel.height}×${selectedParcel.width}m`}
                     </p>
                   </div>
-                  <StatusBadge status={selectedParcel.current_status} />
+                  <div className="flex items-center gap-3">
+                    <StatusBadge status={selectedParcel.current_status} />
+                    {/* Connection indicator */}
+                    <div className="flex items-center gap-2 text-xs">
+                      {connectionState === 'connected' && (
+                        <>
+                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-green-600 font-medium">Live</span>
+                        </>
+                      )}
+                      {connectionState === 'connecting' && (
+                        <>
+                          <i className="fas fa-spinner fa-spin text-yellow-500" />
+                          <span className="text-yellow-600">Connecting...</span>
+                        </>
+                      )}
+                      {connectionState === 'disconnected' && (
+                        <>
+                          <div className="w-2 h-2 rounded-full bg-gray-400" />
+                          <span className="text-muted-foreground">Offline</span>
+                        </>
+                      )}
+                      {connectionState === 'error' && (
+                        <>
+                          <div className="w-2 h-2 rounded-full bg-red-500" />
+                          <span className="text-red-600">Error</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 {hasValidCoordinates() ? (
                   <div className="h-[300px] lg:h-[400px] rounded-lg overflow-hidden">
@@ -243,6 +307,31 @@ export default function TrackParcel() {
                   <div className="h-[300px] lg:h-[400px] rounded-lg bg-secondary/50 flex items-center justify-center">
                     <p className="text-muted-foreground">Location data not available</p>
                   </div>
+                )}
+                {/* Live location info */}
+                {liveDriverLocation && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-3 p-3 rounded-lg bg-green-50 border border-green-200 dark:bg-green-950/20 dark:border-green-800"
+                  >
+                    <div className="flex items-start gap-2">
+                      <i className="fas fa-location-dot text-green-600 mt-0.5"></i>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                          Driver Current Location
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300">
+                          {liveDriverLocation.address || `${liveDriverLocation.lat.toFixed(6)}, ${liveDriverLocation.lng.toFixed(6)}`}
+                        </p>
+                        {liveDriverLocation.timestamp && (
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                            Updated: {new Date(liveDriverLocation.timestamp).toLocaleTimeString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
                 )}
               </div>
 

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/auth/AuthContext';
 import { dataStore } from '@/data/store';
 import { cn } from '@/lib/utils';
+import logo from "../assets/logo/logo.png"
 
 interface NavItem {
   label: string;
@@ -65,10 +66,11 @@ export function DashboardLayout({ children, navItems, title }: DashboardLayoutPr
         {/* Logo */}
         <div className="p-6 border-b border-sidebar-border">
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sidebar-primary flex items-center justify-center">
+            {/* <div className="w-10 h-10 rounded-xl bg-sidebar-primary flex items-center justify-center">
               <i className="fas fa-truck-fast text-sidebar-primary-foreground text-lg"></i>
             </div>
-            <span className="text-xl font-bold text-sidebar-foreground">ParcelFlow</span>
+            <span className="text-xl font-bold text-sidebar-foreground">RouteX</span> */}
+            <img src={logo} alt="" />
           </Link>
         </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -9,6 +9,8 @@ import { driverAPI } from '@/lib/api';
 import { DriverTask, DriverRoute, ClientContact } from '@/types/driver';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useTrackingSocket } from '@/hooks/useTrackingSocket';
+import { DriverLocation } from '@/types/tracking';
 
 const navItems = [
   { label: 'Dashboard', path: '/driver', icon: 'fas fa-home' },
@@ -25,6 +27,26 @@ export default function DriverNavigation() {
   const [clientContact, setClientContact] = useState<ClientContact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
+  const [isTrackingEnabled, setIsTrackingEnabled] = useState(false);
+  const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // WebSocket tracking for driver (can send location updates)
+  const { connectionState, sendLocationUpdate } = useTrackingSocket({
+    parcelId: selectedTask?.id || 0,
+    autoConnect: !!selectedTask?.id && isTrackingEnabled,
+    onError: (error) => {
+      console.error('[Driver] Tracking error:', error);
+      if (!error.includes('reconnect')) {
+        toast.error(`Tracking error: ${error}`);
+      }
+    },
+    onConnectionChange: (state) => {
+      console.log(`[Driver] Tracking connection state: ${state}`);
+      if (state === 'connected' && isTrackingEnabled) {
+        toast.success('Live tracking enabled', { duration: 2000 });
+      }
+    },
+  });
 
   useEffect(() => {
     loadTasks();
@@ -78,7 +100,17 @@ export default function DriverNavigation() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setCurrentLocation([position.coords.latitude, position.coords.longitude]);
+          const newLocation: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setCurrentLocation(newLocation);
+          
+          // Send location update via WebSocket if tracking is enabled
+          if (isTrackingEnabled && selectedTask && connectionState === 'connected') {
+            sendLocationUpdate({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              address: 'Current location', // Will be geocoded server-side if needed
+            });
+          }
         },
         (error) => {
           console.error('Failed to get location:', error);
@@ -90,6 +122,46 @@ export default function DriverNavigation() {
       setCurrentLocation([19.0760, 72.8777]);
     }
   };
+
+  // Start/stop location tracking
+  const toggleTracking = () => {
+    if (!selectedTask) {
+      toast.error('Please select a delivery first');
+      return;
+    }
+
+    setIsTrackingEnabled(!isTrackingEnabled);
+    
+    if (!isTrackingEnabled) {
+      // Start tracking
+      toast.success('Live tracking started');
+      getCurrentLocation(); // Get initial location
+    } else {
+      // Stop tracking
+      toast.info('Live tracking stopped');
+    }
+  };
+
+  // Periodic location updates when tracking is enabled
+  useEffect(() => {
+    if (isTrackingEnabled && selectedTask && connectionState === 'connected') {
+      // Update location every 5 seconds
+      locationIntervalRef.current = setInterval(() => {
+        getCurrentLocation();
+      }, 5000);
+    } else {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+      }
+    };
+  }, [isTrackingEnabled, selectedTask, connectionState]);
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedTask) return;
@@ -256,9 +328,53 @@ export default function DriverNavigation() {
                       {selectedTask.to_location}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/15 text-accent">
-                    <span className="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                    <span className="text-sm font-medium">Active</span>
+                  <div className="flex items-center gap-3">
+                    {/* Tracking toggle button */}
+                    <button
+                      onClick={toggleTracking}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-2",
+                        isTrackingEnabled
+                          ? "bg-green-500 text-white hover:bg-green-600"
+                          : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                      )}
+                    >
+                      {isTrackingEnabled ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                          <span>Tracking On</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-location-crosshairs"></i>
+                          <span>Start Tracking</span>
+                        </>
+                      )}
+                    </button>
+                    
+                    {/* Connection indicator */}
+                    {isTrackingEnabled && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/15 text-accent">
+                        {connectionState === 'connected' && (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                            <span className="text-sm font-medium">Live</span>
+                          </>
+                        )}
+                        {connectionState === 'connecting' && (
+                          <>
+                            <i className="fas fa-spinner fa-spin text-sm"></i>
+                            <span className="text-sm">Connecting...</span>
+                          </>
+                        )}
+                        {connectionState === 'error' && (
+                          <>
+                            <i className="fas fa-exclamation-triangle text-sm text-red-500"></i>
+                            <span className="text-sm text-red-600">Error</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="h-[400px] rounded-lg overflow-hidden">
