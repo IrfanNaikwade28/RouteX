@@ -18,8 +18,11 @@ class TrackingConsumer(AsyncWebsocketConsumer):
         
         # Check if user is authenticated
         if not self.user or not self.user.is_authenticated:
+            print("[DEBUG] WebSocket connection rejected: User not authenticated")
             await self.close()
             return
+        
+        print(f"[DEBUG] WebSocket connection from user: {self.user.email} (ID: {self.user.id})")
         
         # Get driver_id and parcel_id from query parameters
         query_string = self.scope.get('query_string', b'').decode()
@@ -64,6 +67,8 @@ class TrackingConsumer(AsyncWebsocketConsumer):
     
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
+        print(f"[DEBUG] WebSocket disconnection from {self.user.email if hasattr(self, 'user') else 'unknown user'} (code: {close_code})")
+        
         # Leave driver group if driver
         if hasattr(self, 'driver_group_name'):
             await self.channel_layer.group_discard(
@@ -97,12 +102,14 @@ class TrackingConsumer(AsyncWebsocketConsumer):
                 await self.handle_subscribe_parcel(data)
             elif message_type == 'unsubscribe_parcel':
                 await self.handle_unsubscribe_parcel(data)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"[ERROR] JSON decode error from {self.user.email}: {e}")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'Invalid JSON format'
             }))
         except Exception as e:
+            print(f"[ERROR] Unexpected error in receive() from {self.user.email}: {e}")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': str(e)
@@ -116,11 +123,14 @@ class TrackingConsumer(AsyncWebsocketConsumer):
         parcel_id = data.get('parcel_id', self.parcel_id)
         
         if not lat or not lng:
+            print(f"[ERROR] Invalid location update - missing lat/lng from {self.user.email}")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'Latitude and longitude are required'
             }))
             return
+        
+        print(f"[DEBUG] Location update from {self.user.email}: lat={lat}, lng={lng}, parcel_id={parcel_id}, update_count={self.update_count + 1}")
         
         # Increment update count
         self.update_count += 1
