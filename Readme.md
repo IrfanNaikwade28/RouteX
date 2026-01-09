@@ -1,5 +1,5 @@
 
-# RouteX - Real-Time Delivery Management System
+# RouteX 
 
 A comprehensive delivery management platform with real-time tracking, role-based dashboards, and WebSocket-powered live updates.
 
